@@ -1,0 +1,238 @@
+# Discord Reminder Bot — Spec
+
+A shared-secretary reminder bot for a small research collaboration server.
+
+## Overview
+
+A Discord bot for a small research collaboration server (currently 3 users across Central and Eastern time zones). The mental model: a shared secretary that anyone can tell something, anyone can tell to reschedule, and anyone can tell to shut up. No ownership hierarchy, no permission gatekeeping.
+
+The bot manages one-shot reminders that fire in the channel where they were created. Any user can create a reminder targeting any other user (or themselves). Any user can reschedule or cancel any reminder. All changes post a visible note in the channel so nothing disappears silently.
+
+Built with discord.py and SQLite. Deployed on a VPS.
+
+## Commands
+
+| Command | Syntax | Description |
+| --- | --- | --- |
+| /timezone set | `/timezone set <zone>` | Set your timezone. Accepts IANA names (`America/Chicago`), city names, or UTC offsets (`UTC-6`). Required before creating reminders. |
+| /remind | `/remind @user <time> [qualifier] <message>` | Create a reminder. Time defaults to creator's timezone. Optional qualifier: `their time`, `my time`, or an explicit timezone. Multiple targets (`@acacia @elliott`) create separate linked reminders. |
+| /reschedule | `/reschedule <id> <time> [reason]` | Move a reminder to a new time. Optional reason is posted in the channel. |
+| /cancel | `/cancel <id> [reason]` | Cancel a reminder. Optional reason is posted in the channel. |
+| /snooze | `/snooze <id> <duration>` | Push a reminder back by a duration (`15m`, `1h`, `2h`). Also available as buttons on fired reminders. |
+| /list | `/list [@user] [--from @user]` | List pending reminders. No args = all server reminders. `@user` filters by target. `--from @user` filters by creator. Sorted by fire time, soonest first. |
+
+## Timezone System
+
+Per-user timezones stored in the database. Discord does not expose user timezone settings to bots, so each user must run `/timezone set` before creating reminders. If a user tries to create a reminder without a stored timezone, the bot prompts them to set one rather than silently defaulting to UTC.
+
+### Parsing
+
+Time expressions are parsed with `dateparser` (Python). The creator's stored timezone is the default reference. Three qualifiers modify this:
+
+- **`their time`** — interpret the time in the target's timezone. `/remind @acacia 9am their time do the thing` = 9 AM Central if Acacia is set to `America/Chicago`.
+- **`my time`** — explicit but redundant (this is already the default). Useful for clarity.
+- **Explicit timezone** — `/remind @acacia 9am UTC-6 do the thing` or `/remind @acacia 9am ET do the thing`.
+
+The qualifier is detected and stripped before the remaining time string is handed to `dateparser`.
+
+### Display
+
+Every time display uses a two-part format: the creator's original time with its timezone label, followed by a Discord dynamic timestamp that renders in the viewer's local timezone.
+
+Example as seen by someone in Central time:
+
+> (from Elliott, 10:00 AM ET) \[your time: 9:00 AM\]
+
+The bracketed portion is a Discord `<t:UNIX:t>` timestamp that each viewer sees in their own timezone. If the creator and viewer share a timezone, the two times match — slightly redundant, obviously fine.
+
+## Permissions
+
+Flat. No ownership hierarchy.
+
+- **Create:** Any server member can create a reminder targeting any other server member (or themselves).
+- **Reschedule:** Any server member can reschedule any pending reminder.
+- **Cancel:** Any server member can cancel any pending reminder.
+- **List:** Any server member can see all pending reminders on the server.
+
+There is no opt-in or opt-out mechanism for being reminded. On a 3-person research server this is a feature, not a gap. If the server grows, this is the first thing to revisit.
+
+## Notification and Display
+
+### Where reminders fire
+
+Reminders fire in the channel where they were created. The channel is the context — a reminder set in `#facct-paper` fires there, so the domain is obvious before reading the message.
+
+**Fallback:** If the bot loses access to the original channel (permissions revoked, channel deleted), the reminder is delivered as a DM to the target with a note about where it was originally set.
+
+### Fired reminder format
+
+> ⏰ @acacia — submit IRB revision (from Elliott, 10:00 AM ET) \[your time: 9:00 AM\]
+
+Followed by interaction buttons (see Interaction UX).
+
+### Audit trail
+
+All state changes post a visible note in the originating channel:
+
+**Reschedule:**
+
+> 🔄 acacia rescheduled reminder #12 → 10:00 AM CT \[your time: 10:00 AM\] — "sick"
+
+**Cancel:**
+
+> ❌ acacia cancelled reminder #12 (submit IRB revision) — "Elliott said he's handling it"
+
+**Done (acknowledged completion):**
+
+> ✅ acacia completed: submit IRB revision
+
+Reasons on reschedule and cancel are optional. If omitted, the note posts without one.
+
+### Confirmation on creation
+
+When a reminder is created, the bot confirms in the same channel:
+
+> Created reminder #12 for @acacia: "submit IRB revision" — 9:00 AM CT \[your time: 9:00 AM\] Oct 1 in #facct-paper (from Elliott)
+
+For multi-target reminders, each gets its own ID in the confirmation.
+
+## Multi-Target Reminders
+
+`/remind @acacia @elliott 9am do the thing` creates two separate reminders that share a `batch_id` in the database.
+
+### Independence
+
+Each reminder has its own ID, fires separately, and can be rescheduled or cancelled independently. Cancelling one does not affect the other. Rescheduling one does not move the other. They are separate entries that happen to have been born together.
+
+### Light linking
+
+When a reminder with siblings is cancelled or rescheduled, the channel notification mentions the sibling:
+
+> 🔄 acacia rescheduled reminder #14 → 10:00 AM CT \[your time: 10:00 AM\] — "need more time" (elliott's copy #15 is still active)
+
+This is awareness, not coordination. No cascading operations, no prompts to update siblings, no group commands. The secretary tells you the other one's still on the books; the secretary doesn't make decisions about it.
+
+### Firing
+
+Siblings fire as separate messages, each with their own interaction buttons. This means each target can snooze or dismiss independently.
+
+## Interaction UX
+
+### Buttons on fired reminders
+
+When a reminder fires, the message includes a row of Discord buttons:
+
+`[Snooze 15m]` `[Snooze 1h]` `[Done ✓]` `[Cancel]`
+
+- **Snooze 15m / 1h** — pushes the reminder back by that duration. Posts a snooze note in the channel and re-fires later. Buttons reappear on the re-fired message.
+- **Done ✓** — marks the reminder as completed. Posts `✅ acacia completed: submit IRB revision` in the channel. Clears the buttons.
+- **Cancel** — cancels the reminder. Posts the cancel note in the channel (no reason via button; use `/cancel <id> reason` for that). Clears the buttons.
+
+Any server member can press any button (flat permissions). The note identifies who pressed it.
+
+### Slash commands for deliberate management
+
+Buttons handle the immediate "I just got pinged" interaction. Slash commands handle everything else: creating reminders, rescheduling to a specific time, cancelling with a reason, listing pending reminders.
+
+The reminder ID (shown in `/list` output and in creation confirmations) is how slash commands reference a specific reminder.
+
+### Button expiry
+
+Discord buttons are tied to the running bot process. If the bot restarts, buttons on previously sent messages become inert. This is a known Discord limitation. Slash commands remain functional regardless. The bot should handle stale button interactions gracefully — reply with "this reminder has already been handled" or "use `/snooze <id> <duration>` instead" rather than erroring silently.
+
+## Data Model
+
+SQLite, single file, deployed alongside the bot.
+
+### `users` table
+
+| Column | Type | Notes |
+| --- | --- | --- |
+| discord\_id | TEXT PK | Discord user snowflake |
+| timezone | TEXT | IANA timezone string, e.g. `America/Chicago` |
+| created\_at | TEXT | ISO 8601 |
+
+### `reminders` table
+
+| Column | Type | Notes |
+| --- | --- | --- |
+| id | INTEGER PK | Auto-increment, used in slash commands (`#12`) |
+| creator\_id | TEXT FK | Discord ID of who created it |
+| target\_id | TEXT FK | Discord ID of who gets pinged |
+| channel\_id | TEXT | Channel where it was created and will fire |
+| guild\_id | TEXT | Server ID |
+| message | TEXT | The reminder text |
+| fire\_at | TEXT | ISO 8601 UTC — internal storage always in UTC |
+| created\_at | TEXT | ISO 8601 UTC |
+| status | TEXT | `pending`, `fired`, `snoozed`, `done`, `cancelled` |
+| batch\_id | TEXT NULL | Shared UUID for multi-target reminders, NULL for singles |
+| recurrence\_rule | TEXT NULL | Reserved for future recurring reminders, always NULL in v1 |
+| original\_tz | TEXT | Creator's timezone at creation time, for display |
+| original\_time\_str | TEXT | The original time as entered, for display (e.g. "10:00 AM ET") |
+
+### `reminder_log` table
+
+| Column | Type | Notes |
+| --- | --- | --- |
+| id | INTEGER PK | Auto-increment |
+| reminder\_id | INTEGER FK | Which reminder |
+| action | TEXT | `created`, `rescheduled`, `snoozed`, `cancelled`, `done`, `fired` |
+| actor\_id | TEXT | Discord ID of who did it |
+| reason | TEXT NULL | Optional reason string |
+| old\_fire\_at | TEXT NULL | Previous fire time (for reschedule/snooze) |
+| new\_fire\_at | TEXT NULL | New fire time (for reschedule/snooze) |
+| timestamp | TEXT | ISO 8601 UTC |
+
+The log table provides a full history of each reminder. This is useful for debugging and for the audit trail, though the channel messages are the primary user-facing record.
+
+## Deployment
+
+### Stack
+
+- **Python 3.11+** with discord.py (slash commands, buttons, interactions)
+- **SQLite** for persistence (single file, no external database service)
+- **dateparser** for natural language time parsing
+- **APScheduler** or asyncio-based scheduler for firing reminders at the right time
+- **pytz** or **zoneinfo** (stdlib in 3.9+) for timezone handling
+
+### VPS setup
+
+Run as a systemd service for automatic restart on crash or reboot. The bot token goes in an environment variable or a `.env` file outside the repo.
+
+### Startup recovery
+
+On startup, the bot queries all `pending` and `snoozed` reminders from the database and re-registers their fire times with the scheduler. This handles bot restarts without losing track of pending reminders.
+
+### Discord bot setup
+
+Requires a Discord application with a bot user. Permissions needed: Send Messages, Embed Links, Use Slash Commands, Read Message History. The bot should be added to the server with an OAuth2 URL scoped to the specific server.
+
+### Repo structure
+
+Single-repo project. Suggested layout:
+
+```
+reminder-bot/
+├── bot.py              # Entry point, bot setup, event loop
+├── cogs/
+│   ├── reminders.py    # /remind, /reschedule, /cancel, /snooze, /list
+│   └── timezone.py     # /timezone set
+├── db.py               # SQLite connection, queries, schema
+├── scheduler.py        # Reminder scheduling and firing logic
+├── time_parser.py      # NLP time parsing, qualifier detection
+├── config.py           # Bot token, DB path, constants
+├── requirements.txt
+└── README.md
+```
+
+## Future Extensions
+
+Deferred from v1 but the data model and architecture should not close them off.
+
+**Recurring reminders.** The `recurrence_rule` column is already reserved. Implementation would add an RRULE-style string (RFC 5545) and a scheduler hook that creates the next occurrence after each firing. The `/remind` command would accept interval syntax like `every monday 9am` or `every friday at 3pm`. No changes to the permissions model or display format needed.
+
+**Reminder categories or tags.** Could add a `tags` column for organizing reminders by topic (`#facct`, `#irb`, `#grading`). Would let `/list` filter by tag. Low effort, unclear if needed at current server size.
+
+**Thread-based reminders.** Fire the reminder as a reply in a specific thread rather than the top-level channel. Useful if the server develops more structured channel usage.
+
+**Escalation.** If a reminder is snoozed more than N times, optionally notify the creator. Passive accountability without being punitive. Questionable whether this is wanted.
