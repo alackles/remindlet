@@ -15,7 +15,7 @@ Built with discord.py and SQLite. Deployed on a VPS.
 | Command | Syntax | Description |
 | --- | --- | --- |
 | /timezone set | `/timezone set <zone>` | Set your timezone. Accepts IANA names (`America/Chicago`), with autocomplete suggestions as you type. Required before creating reminders or being the target of one. |
-| /remind | `/remind @user <time> [qualifier] <message>` | Create a reminder. Time defaults to creator's timezone. Optional qualifier: `their time`, `my time`, or an explicit timezone. Multiple targets (`@acacia @elliott`) create separate linked reminders. |
+| /remind | `/remind who:@user when:<time> [qualifier] what:<message> [also:@user] [also2:@user]` | Create a reminder. Time defaults to creator's timezone. Optional qualifier in `when`: `their time`, `my time`, or an explicit timezone. Extra targets in `also`/`also2` create separate linked reminders. Elsewhere this spec abbreviates the syntax as `/remind @acacia 9am do the thing`. |
 | /reschedule | `/reschedule <id> <time> [reason]` | Move a reminder to a new time. Optional reason is posted in the channel. |
 | /cancel | `/cancel <id> [reason]` | Cancel a reminder. Optional reason is posted in the channel. |
 | /snooze | `/snooze <id> <duration>` | Push a reminder back by a duration (`15m`, `1h`, `2h`). Also available as buttons on fired reminders. |
@@ -113,6 +113,12 @@ When a reminder is created, the bot confirms in the same channel:
 > Created reminder #12 for @acacia: "submit IRB revision" — 9:00 AM CT \[your time: 9:00 AM\] Oct 1 in #facct-paper (from Elliott)
 
 For multi-target reminders, each gets its own ID in the confirmation.
+
+The confirmation pings the targets, so they know something was set for them. The date shows the year only when it isn't the current year.
+
+If the creator or any target has no stored timezone, nothing is created; the error names everyone who needs to run `/timezone set`.
+
+No bot message ever pings `@everyone`, `@here`, or roles, even if they appear in reminder text. A fired reminder pings only its target.
 
 ## Multi-Target Reminders
 
@@ -220,6 +226,8 @@ Run as a systemd service for automatic restart on crash or reboot. The bot token
 ### Startup recovery
 
 On startup, the bot queries all `pending` and `snoozed` reminders from the database and re-registers their fire times with the scheduler. This handles bot restarts without losing track of pending reminders.
+
+Reminders that came due while the bot was offline fire immediately on startup, with a note that they are late so the arrival time isn't mistaken for the time they were set for.
 
 ### Discord bot setup
 
