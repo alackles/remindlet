@@ -47,3 +47,8 @@ Design choices the spec doesn't cover. Format: milestone — choice (convention 
 - M4 — Displayed times are always computed from `fire_at` in `original_tz`, never read from `original_time_str`, so snoozed reminders show their new time. (convention)
 - M4 — `/list` entries are two lines: `#id @target: time [your time] date`, then a small-text `TASK · FROM · channel` line. FROM is a mention, which renders as a name with no lookup (the list is ephemeral, so nothing pings). (judgment call)
 - M4 — `/list` shows as many entries as fit in one message (1900 characters), then "…and N more", rather than paginating. (judgment call)
+- M4 — The `id` option is text, not an integer, so autocomplete can search reminder text and names; `12` and `#12` are both accepted. (judgment call)
+- M4 — Autocomplete labels use only display names the bot has already seen (no API calls inside Discord's 3-second autocomplete window); an unseen target's name is left out of the label. (judgment call)
+- M4 — An audit note is the command's reply when run in the reminder's channel; otherwise it posts there directly and the person gets a private pointer; if that channel is unreachable, it posts where the command was run. (judgment call)
+- M4 — `/reschedule` requires the person rescheduling to have a timezone, since `when` is read in their zone. (judgment call)
+- M4 — A reminder ID from another server is reported as not found. (convention)
