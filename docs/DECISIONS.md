@@ -43,3 +43,4 @@ Design choices the spec doesn't cover. Format: milestone — choice (convention 
 - M4 — All state changes go through one helper, `db._change()`, whose `UPDATE … WHERE status IN (open)` guard makes simultaneous changes safe: only the first wins. (convention)
 - M4 — Acting on a closed reminder raises `ReminderClosed`, carrying who closed it (from `reminder_log`) for the error message. (judgment call)
 - M4 — Snooze leaves `original_time_str` as entered; the new time is displayed by formatting `fire_at` in `original_tz`. (judgment call)
+- M4 — Snooze durations parsed by our own regex (days/hours/minutes, combinable), not dateparser; capped at 30 days, beyond which `/reschedule` is the right tool. (judgment call)

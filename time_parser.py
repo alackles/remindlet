@@ -226,3 +226,37 @@ def parse_when(text: str, *, creator_tz: str, target_tz: str, now: datetime) -> 
     if fire_at <= now:
         raise ParseError(f"`{text}` is in the past ({format_in_zone(fire_at, zone)}).")
     return ParsedTime(fire_at=fire_at, zone=zone, display=format_in_zone(fire_at, zone))
+
+
+_DURATION_PART = re.compile(
+    # Longest unit names first, or "d" would match the start of "days".
+    r"(\d+)\s*(days?|d|hours?|hrs?|h|minutes?|mins?|m)", re.IGNORECASE
+)
+_UNIT_SECONDS = {"d": 86400, "h": 3600, "m": 60}
+MAX_SNOOZE = timedelta(days=30)
+
+
+def parse_duration(text: str) -> timedelta:
+    """Parse a snooze length like `15m`, `1h30m`, `90 minutes`, or `1 day`."""
+    compact = re.sub(r"\s+", " ", text.strip().lower())
+    parts = list(_DURATION_PART.finditer(compact))
+    leftover = _DURATION_PART.sub("", compact).replace("and", "").replace(",", "").strip()
+    if not parts or leftover:
+        raise ParseError(f"`{text}` isn't a duration. Try `15m`, `1h`, `1h30m`, or `1d`.")
+    total = timedelta(
+        seconds=sum(int(m.group(1)) * _UNIT_SECONDS[m.group(2)[0]] for m in parts)
+    )
+    if total <= timedelta(0):
+        raise ParseError("Snooze for at least a minute.")
+    if total > MAX_SNOOZE:
+        raise ParseError("Snoozes are capped at 30 days; use `/reschedule` for longer.")
+    return total
+
+
+def format_duration(duration: timedelta) -> str:
+    """Compact form for display: `1h`, `1h 30m`, `2d 3h`."""
+    minutes = int(duration.total_seconds()) // 60
+    days, minutes = divmod(minutes, 1440)
+    hours, minutes = divmod(minutes, 60)
+    parts = [f"{n}{unit}" for n, unit in ((days, "d"), (hours, "h"), (minutes, "m")) if n]
+    return " ".join(parts) or "0m"

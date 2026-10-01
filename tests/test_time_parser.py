@@ -7,7 +7,9 @@ from time_parser import (
     ParseError,
     extract_zone,
     find_zone,
+    format_duration,
     format_in_zone,
+    parse_duration,
     parse_when,
     suggest_zones,
     zone_label,
@@ -278,3 +280,44 @@ def test_unsupported_zone_is_rejected(text):
 def test_naive_now_is_a_programming_error():
     with pytest.raises(ValueError, match="aware"):
         parse("9am", now=datetime(2026, 10, 1, 10, 40))
+
+
+# --- Snooze durations --------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "text, expected",
+    [
+        ("15m", timedelta(minutes=15)),
+        ("1h", timedelta(hours=1)),
+        ("2H", timedelta(hours=2)),
+        ("1h30m", timedelta(minutes=90)),
+        ("1h 30m", timedelta(minutes=90)),
+        ("90 minutes", timedelta(minutes=90)),
+        ("1 hour and 15 mins", timedelta(minutes=75)),
+        ("1d", timedelta(days=1)),
+        ("2 days", timedelta(days=2)),
+        ("30d", timedelta(days=30)),
+    ],
+)
+def test_parse_duration(text, expected):
+    assert parse_duration(text) == expected
+
+
+@pytest.mark.parametrize("text", ["", "soon", "15", "1 week", "1h later", "0m", "31d", "-1h"])
+def test_parse_duration_rejects(text):
+    with pytest.raises(ParseError):
+        parse_duration(text)
+
+
+@pytest.mark.parametrize(
+    "duration, text",
+    [
+        (timedelta(minutes=15), "15m"),
+        (timedelta(hours=1), "1h"),
+        (timedelta(minutes=90), "1h 30m"),
+        (timedelta(days=2, hours=3), "2d 3h"),
+    ],
+)
+def test_format_duration(duration, text):
+    assert format_duration(duration) == text
