@@ -28,3 +28,8 @@ Design choices the spec doesn't cover. Format: milestone — choice (convention 
 - M2 — Whether a past time-only input omitted its date is detected by re-parsing with "now" moved a day later and checking whether the result moves with it. (judgment call)
 - M2 — dateparser restricted to English (`languages=["en"]`): faster, and avoids matching words in other languages. (convention)
 - M2 — Tests name fake users by role (`USER`, `CREATOR`, `TARGET`) with snowflake-sized IDs, not real server members; parser tests describe the spec's scenario in a comment instead. (convention, correction)
+- M3 — Scheduler is one asyncio task that treats the database as the schedule (sleep until the soonest active reminder, fire what's due, repeat), not APScheduler; `wake()` interrupts the sleep when reminders change. (judgment call)
+- M3 — Send, then mark fired: a crash between the two re-fires on restart (duplicate) rather than losing the reminder. (judgment call)
+- M3 — A failed send is logged and still marked fired so it isn't retried forever; Milestone 5's DM fallback goes in the fire callback. (judgment call)
+- M3 — The scheduler re-checks the database at least every 60 s, so a system clock adjustment can't strand a reminder. (convention)
+- M3 — The scheduler takes its fire callback and clock as arguments, so tests run with a fake clock and no Discord. (convention)
