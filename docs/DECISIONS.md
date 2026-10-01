@@ -1,6 +1,8 @@
 # Decisions
 
-Design choices the spec doesn't cover. Format: milestone — choice (convention | judgment call).
+Design choices the spec doesn't cover. Format: milestone — choice (convention | judgment call[, correction]).
+
+`correction` marks a choice that changed because Acacia questioned or pointed something out.
 
 - M0 — Dependencies in `requirements.txt` with minimum versions (`>=`), not exact pins; local env is `.venv/`. (convention)
 - M0 — Sync slash commands to the single guild (`GUILD_ID`) on every startup in `setup_hook`, rather than global sync or a manual sync command. (judgment call)
@@ -25,4 +27,4 @@ Design choices the spec doesn't cover. Format: milestone — choice (convention 
 - M2 — "Includes a time of day" is detected by our own regex (clock times, `noon`/`midnight`, hour/minute durations), because dateparser's `period` reports `day` for nearly everything. (judgment call)
 - M2 — Whether a past time-only input omitted its date is detected by re-parsing with "now" moved a day later and checking whether the result moves with it. (judgment call)
 - M2 — dateparser restricted to English (`languages=["en"]`): faster, and avoids matching words in other languages. (convention)
-- M2 — Tests name fake users by role (`USER`, `CREATOR`, `TARGET`) with snowflake-sized IDs, not real server members; parser tests describe the spec's scenario in a comment instead. (convention)
+- M2 — Tests name fake users by role (`USER`, `CREATOR`, `TARGET`) with snowflake-sized IDs, not real server members; parser tests describe the spec's scenario in a comment instead. (convention, correction)

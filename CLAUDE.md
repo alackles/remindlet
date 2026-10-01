@@ -11,6 +11,8 @@ every change is announced in the channel where the reminder lives.
 - When you make a design choice the spec doesn't cover, add one line to
   `docs/DECISIONS.md`: milestone, the choice, and whether it's a
   convention (standard practice) or a judgment call (real alternatives exist).
+  Also tag it `correction` if the choice changed because I questioned or
+  pointed something out, e.g. `(convention, correction)`.
 
 ## Working style
 
