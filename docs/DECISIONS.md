@@ -21,3 +21,7 @@ Design choices the spec doesn't cover. Format: milestone — choice (convention 
 - M2 — `UTC±N` accepts whole hours only and is stored as the IANA name `Etc/GMT∓N` (sign inverted per IANA), so `original_tz` is always loadable by `ZoneInfo`. (judgment call)
 - M2 — Display labels: `ET`/`CT`/`MT`/`PT` for the main US zones (as in the spec's examples), `UTC±N` for offsets, otherwise tzdata's own abbreviation (`BST`). (judgment call)
 - M2 — Naming more than one zone in one expression (`9am ET their time`) is an error rather than last-one-wins. (judgment call)
+- M2 — dateparser returns naive wall-clock time and `zoneinfo` attaches the zone, so day arithmetic stays correct across DST; purely relative input (`in 2 hours`) is computed from UTC "now" so it's real elapsed time. (convention)
+- M2 — "Includes a time of day" is detected by our own regex (clock times, `noon`/`midnight`, hour/minute durations), because dateparser's `period` reports `day` for nearly everything. (judgment call)
+- M2 — Whether a past time-only input omitted its date is detected by re-parsing with "now" moved a day later and checking whether the result moves with it. (judgment call)
+- M2 — dateparser restricted to English (`languages=["en"]`): faster, and avoids matching words in other languages. (convention)

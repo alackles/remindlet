@@ -49,7 +49,8 @@ Rules for the time expression:
 
 - **A time is required.** A date alone (`friday`, `oct 3`, `tomorrow`, `in 3 days`) is rejected with a hint to add one (`friday 9am`). Relative times (`in 2 hours`, `90m`) count as having a time. A bare number (`9`, `at 9`) is rejected as ambiguous.
 - **Time-only input that has already passed today rolls to tomorrow.** `9am` entered at 10:40 AM means 9 AM tomorrow. `today 9am` at 10:40 AM is rejected instead.
-- **Anything else in the past is rejected.**
+- **A month and day without a year means its next occurrence.** `jan 5 9am` in October means next January; so does `sept 30 3pm` on October 1 (a year out). Confirmations show the year whenever it isn't the current one, so a slip is visible.
+- **Anything else in the past is rejected** (`yesterday 9am`, `sept 30 2026 3pm`).
 - Unparseable input is rejected with example phrasings.
 
 ### Display
