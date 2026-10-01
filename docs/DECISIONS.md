@@ -44,3 +44,6 @@ Design choices the spec doesn't cover. Format: milestone — choice (convention 
 - M4 — Acting on a closed reminder raises `ReminderClosed`, carrying who closed it (from `reminder_log`) for the error message. (judgment call)
 - M4 — Snooze leaves `original_time_str` as entered; the new time is displayed by formatting `fire_at` in `original_tz`. (judgment call)
 - M4 — Snooze durations parsed by our own regex (days/hours/minutes, combinable), not dateparser; capped at 30 days, beyond which `/reschedule` is the right tool. (judgment call)
+- M4 — Displayed times are always computed from `fire_at` in `original_tz`, never read from `original_time_str`, so snoozed reminders show their new time. (convention)
+- M4 — `/list` entries are two lines: `#id @target: time [your time] date`, then a small-text `TASK · FROM · channel` line. FROM is a mention, which renders as a name with no lookup (the list is ephemeral, so nothing pings). (judgment call)
+- M4 — `/list` shows as many entries as fit in one message (1900 characters), then "…and N more", rather than paginating. (judgment call)

@@ -1,15 +1,22 @@
-"""Message text for confirmations and fired reminders. No Discord imports.
+"""Message text for every bot post: confirmations, fired reminders, audit
+notes, and /list. No Discord imports.
 
 Mentions and timestamps are Discord markup: <@id> renders as @name, <#id> as
 #channel, and <t:unix:t> as a time in each viewer's own timezone.
 """
 
+from collections.abc import Mapping, Sequence
 from datetime import datetime, timedelta
-from typing import NamedTuple
+from typing import Any, NamedTuple
 from zoneinfo import ZoneInfo
+
+from time_parser import format_in_zone
 
 # Fired this long after its time, a reminder is labeled late.
 LATE_AFTER = timedelta(minutes=1)
+
+# Discord's message limit is 2000 characters; leave room for the overflow line.
+LIST_BUDGET = 1900
 
 
 def mention(user_id: int | str) -> str:
@@ -78,3 +85,61 @@ def fired(
         # "-#" is Discord's small-text markdown.
         lines.append("-# ⚠️ Late: the bot was offline when this was due.")
     return "\n".join(lines)
+
+
+def audit_note(
+    *,
+    header: str,
+    target_id: int | str,
+    message: str,
+    fire_at: datetime | None = None,
+    zone: str | None = None,
+    reason: str | None = None,
+    siblings: Sequence[tuple[str, int]] = (),
+) -> str:
+    """A reschedule/snooze/cancel/done note. AT appears when fire_at is given;
+    siblings are (target name, reminder id) pairs for the ALSO lines."""
+    lines = [header, f"FOR: {mention(target_id)}", f"TASK: {message}"]
+    if fire_at is not None:
+        lines.append(f"AT: {format_in_zone(fire_at, zone)} {your_time(fire_at)}")
+    if reason:
+        lines.append(f"REASON: {reason}")
+    lines += [f"ALSO: {name}'s copy #{rid} is still active" for name, rid in siblings]
+    return "\n".join(lines)
+
+
+def _list_entry(row: Mapping[str, Any], now: datetime) -> str:
+    fire_at = datetime.fromisoformat(row["fire_at"])
+    zone = row["original_tz"]
+    when = f"{format_in_zone(fire_at, zone)} {your_time(fire_at)} {short_date(fire_at, zone, now)}"
+    if row["status"] == "fired":
+        when = f"was due {when}"
+    return (
+        f"#{row['id']} {mention(row['target_id'])}: {when}\n"
+        f"-# TASK: {row['message']} · FROM: {mention(row['creator_id'])} · in <#{row['channel_id']}>"
+    )
+
+
+def reminder_list(rows: Sequence[Mapping[str, Any]], *, title: str, now: datetime) -> str:
+    """/list output: upcoming, then fired-but-not-done, cut to fit one message.
+
+    rows must already be in display order (db.list_open's order).
+    """
+    if not rows:
+        return f"No open reminders{title}."
+    upcoming = [r for r in rows if r["status"] != "fired"]
+    fired = [r for r in rows if r["status"] == "fired"]
+    out = f"**Open reminders{title}**"
+    shown = 0
+    for heading, section in (("Upcoming", upcoming), ("Fired, not marked done", fired)):
+        if not section:
+            continue
+        block = f"\n\n**{heading}**"
+        for row in section:
+            entry = "\n" + _list_entry(row, now)
+            if len(out) + len(block) + len(entry) > LIST_BUDGET:
+                return out + block + f"\n\n…and {len(rows) - shown} more. Narrow it with `who:` or `from:`."
+            block += entry
+            shown += 1
+        out += block
+    return out

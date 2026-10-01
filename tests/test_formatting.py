@@ -96,3 +96,86 @@ def test_fired_late_note(delay, late):
 )
 def test_short_date(fire_at, now, expected):
     assert formatting.short_date(fire_at, "America/Chicago", now) == expected
+
+
+# --- Audit notes -----------------------------------------------------------------
+
+
+def test_reschedule_note_matches_spec():
+    text = formatting.audit_note(
+        header="🔄 acacia rescheduled reminder #14",
+        target_id=TARGET,
+        message="do the thing",
+        fire_at=FIRE_AT,
+        zone="America/Chicago",
+        reason="need more time",
+        siblings=[("elliott", 15)],
+    )
+    assert text.splitlines() == [
+        "🔄 acacia rescheduled reminder #14",
+        f"FOR: <@{TARGET}>",
+        "TASK: do the thing",
+        f"AT: 9:00 AM CT [your time: <t:{UNIX}:t>]",
+        "REASON: need more time",
+        "ALSO: elliott's copy #15 is still active",
+    ]
+
+
+def test_note_without_time_reason_or_siblings():
+    text = formatting.audit_note(
+        header="✅ acacia completed reminder #12", target_id=TARGET, message="submit IRB revision"
+    )
+    assert text.splitlines() == [
+        "✅ acacia completed reminder #12",
+        f"FOR: <@{TARGET}>",
+        "TASK: submit IRB revision",
+    ]
+
+
+# --- /list ---------------------------------------------------------------------------
+
+
+def row(rid, status="pending", fire_at=FIRE_AT, message="m"):
+    return {
+        "id": rid, "status": status, "fire_at": fire_at.isoformat(), "original_tz": "America/Chicago",
+        "target_id": TARGET, "creator_id": 222, "channel_id": 42, "message": message,
+    }
+
+
+def test_list_sections_and_entry_format():
+    text = formatting.reminder_list(
+        [row(12), row(9, status="fired", fire_at=FIRE_AT - timedelta(days=1))],
+        title="", now=FIRE_AT - timedelta(hours=1),
+    )
+    yesterday = int((FIRE_AT - timedelta(days=1)).timestamp())
+    assert text.splitlines() == [
+        "**Open reminders**",
+        "",
+        "**Upcoming**",
+        f"#12 <@{TARGET}>: 9:00 AM CT [your time: <t:{UNIX}:t>] Oct 1",
+        "-# TASK: m · FROM: <@222> · in <#42>",
+        "",
+        "**Fired, not marked done**",
+        f"#9 <@{TARGET}>: was due 9:00 AM CT [your time: <t:{yesterday}:t>] Sep 30",
+        "-# TASK: m · FROM: <@222> · in <#42>",
+    ]
+
+
+def test_list_omits_empty_section():
+    text = formatting.reminder_list([row(12)], title="", now=FIRE_AT)
+    assert "Fired" not in text
+
+
+def test_empty_list_mentions_filters():
+    assert formatting.reminder_list([], title=f" for <@{TARGET}>", now=FIRE_AT) == (
+        f"No open reminders for <@{TARGET}>."
+    )
+
+
+def test_long_list_is_cut_with_count():
+    rows = [row(i, message="x" * 150) for i in range(1, 41)]
+    text = formatting.reminder_list(rows, title="", now=FIRE_AT)
+    assert len(text) <= 2000
+    shown = text.count("\n#")
+    assert shown > 0
+    assert text.endswith(f"…and {40 - shown} more. Narrow it with `who:` or `from:`.")
