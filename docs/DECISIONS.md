@@ -18,3 +18,6 @@ Design choices the spec doesn't cover. Format: milestone — choice (convention 
 - M1 — Empty autocomplete input suggests the four main US zones plus UTC instead of the first 25 alphabetically. (judgment call)
 - M1 — `/timezone set` errors are ephemeral; only successful changes post publicly. (judgment call)
 - M1 — Public confirmations name the user by display name, not @mention, so changing a setting doesn't ping anyone. (judgment call)
+- M2 — `UTC±N` accepts whole hours only and is stored as the IANA name `Etc/GMT∓N` (sign inverted per IANA), so `original_tz` is always loadable by `ZoneInfo`. (judgment call)
+- M2 — Display labels: `ET`/`CT`/`MT`/`PT` for the main US zones (as in the spec's examples), `UTC±N` for offsets, otherwise tzdata's own abbreviation (`BST`). (judgment call)
+- M2 — Naming more than one zone in one expression (`9am ET their time`) is an error rather than last-one-wins. (judgment call)
