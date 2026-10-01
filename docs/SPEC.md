@@ -97,21 +97,41 @@ Followed by interaction buttons (see Interaction UX).
 
 ### Audit trail
 
-All state changes post a visible note in the originating channel:
+All state changes post a visible note in the originating channel, in the same labeled-line style as fired reminders. The first line says who did what to which reminder; TASK always follows so the note makes sense on its own. The actor is named without a ping.
 
 **Reschedule:**
 
-> 🔄 acacia rescheduled reminder #12 → 10:00 AM CT \[your time: 10:00 AM\] — "sick"
+```
+🔄 acacia rescheduled reminder #12
+TASK: submit IRB revision
+AT: 10:00 AM CT [your time: 10:00 AM]
+REASON: sick
+```
+
+**Snooze** (slash command or button):
+
+```
+💤 acacia snoozed reminder #12 for 1h
+TASK: submit IRB revision
+AT: 10:00 AM CT [your time: 10:00 AM]
+```
 
 **Cancel:**
 
-> ❌ acacia cancelled reminder #12 (submit IRB revision) — "Elliott said he's handling it"
+```
+❌ acacia cancelled reminder #12
+TASK: submit IRB revision
+REASON: Elliott said he's handling it
+```
 
 **Done (acknowledged completion):**
 
-> ✅ acacia completed: submit IRB revision
+```
+✅ acacia completed reminder #12
+TASK: submit IRB revision
+```
 
-Reasons on reschedule and cancel are optional. If omitted, the note posts without one.
+Reasons on reschedule and cancel are optional. If omitted, the REASON line is left out. AT on reschedule and snooze is the new time, labeled in the zone the reminder was originally given in.
 
 ### Confirmation on creation
 
@@ -147,9 +167,15 @@ Each reminder has its own ID, fires separately, and can be rescheduled or cancel
 
 ### Light linking
 
-When a reminder with siblings is cancelled or rescheduled, the channel notification mentions the sibling:
+When a reminder with siblings is cancelled or rescheduled, the channel notification ends with an ALSO line for each sibling that is still active:
 
-> 🔄 acacia rescheduled reminder #14 → 10:00 AM CT \[your time: 10:00 AM\] — "need more time" (elliott's copy #15 is still active)
+```
+🔄 acacia rescheduled reminder #14
+TASK: do the thing
+AT: 10:00 AM CT [your time: 10:00 AM]
+REASON: need more time
+ALSO: elliott's copy #15 is still active
+```
 
 This is awareness, not coordination. No cascading operations, no prompts to update siblings, no group commands. The secretary tells you the other one's still on the books; the secretary doesn't make decisions about it.
 
@@ -166,7 +192,7 @@ When a reminder fires, the message includes a row of Discord buttons:
 `[Snooze 15m]` `[Snooze 1h]` `[Done ✓]` `[Cancel]`
 
 - **Snooze 15m / 1h** — pushes the reminder back by that duration. Posts a snooze note in the channel and re-fires later. Buttons reappear on the re-fired message.
-- **Done ✓** — marks the reminder as completed. Posts `✅ acacia completed: submit IRB revision` in the channel. Clears the buttons.
+- **Done ✓** — marks the reminder as completed. Posts the done note (see Audit trail) in the channel. Clears the buttons.
 - **Cancel** — cancels the reminder. Posts the cancel note in the channel (no reason via button; use `/cancel <id> reason` for that). Clears the buttons.
 
 Any server member can press any button (flat permissions). The note identifies who pressed it.
