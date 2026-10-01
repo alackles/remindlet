@@ -14,7 +14,7 @@ Built with discord.py and SQLite. Deployed on a VPS.
 
 | Command | Syntax | Description |
 | --- | --- | --- |
-| /timezone set | `/timezone set <zone>` | Set your timezone. Accepts IANA names (`America/Chicago`), city names, or UTC offsets (`UTC-6`). Required before creating reminders. |
+| /timezone set | `/timezone set <zone>` | Set your timezone. Accepts IANA names (`America/Chicago`), with autocomplete suggestions as you type. Required before creating reminders or being the target of one. |
 | /remind | `/remind @user <time> [qualifier] <message>` | Create a reminder. Time defaults to creator's timezone. Optional qualifier: `their time`, `my time`, or an explicit timezone. Multiple targets (`@acacia @elliott`) create separate linked reminders. |
 | /reschedule | `/reschedule <id> <time> [reason]` | Move a reminder to a new time. Optional reason is posted in the channel. |
 | /cancel | `/cancel <id> [reason]` | Cancel a reminder. Optional reason is posted in the channel. |
@@ -23,7 +23,9 @@ Built with discord.py and SQLite. Deployed on a VPS.
 
 ## Timezone System
 
-Per-user timezones stored in the database. Discord does not expose user timezone settings to bots, so each user must run `/timezone set` before creating reminders. If a user tries to create a reminder without a stored timezone, the bot prompts them to set one rather than silently defaulting to UTC.
+Per-user timezones stored in the database. Discord does not expose user timezone settings to bots, so each user must run `/timezone set` before creating reminders. If a user tries to create a reminder without a stored timezone, the bot prompts them to set one rather than silently defaulting to UTC. Likewise, a user cannot be the target of a reminder until they have set a timezone; the bot tells the creator that the target needs to run `/timezone set` first.
+
+`/timezone set` accepts IANA `Area/Location` names (plus `UTC`), case-insensitively, and offers autocomplete as the user types. Fixed-offset zones (`EST`, `Etc/GMT+6`) are rejected because they don't follow daylight saving time. The confirmation is posted publicly in the channel and names the previous timezone if one was set.
 
 ### Parsing
 
