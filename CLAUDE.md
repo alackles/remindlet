@@ -41,7 +41,7 @@ every change is announced in the channel where the reminder lives.
 
 ## Milestones
 
-- [ ] 0. Skeleton: bot connects and `/ping` responds in the server.
+- [x] 0. Skeleton: bot connects and `/ping` responds in the server.
       Done when: the slash command appears and works.
 - [ ] 1. Data layer + timezones: SQLite schema per spec; `/timezone set`.
       Done when: a stored timezone survives a bot restart.
