@@ -5,6 +5,7 @@ Mentions and timestamps are Discord markup: <@id> renders as @name, <#id> as
 """
 
 from datetime import datetime, timedelta
+from typing import NamedTuple
 from zoneinfo import ZoneInfo
 
 # Fired this long after its time, a reminder is labeled late.
@@ -29,23 +30,33 @@ def short_date(dt: datetime, zone: str, now: datetime) -> str:
     return text
 
 
+class Created(NamedTuple):
+    """One target's line in a creation confirmation."""
+
+    reminder_id: int
+    target_id: int
+    display: str
+    fire_at: datetime
+    zone: str
+
+
 def confirmation(
     *,
-    reminder_id: int,
-    target_id: int,
     message: str,
-    display: str,
-    fire_at: datetime,
-    zone: str,
-    channel_id: int,
     creator_name: str,
+    channel_id: int,
+    created: list[Created],
     now: datetime,
 ) -> str:
-    return (
-        f'Created reminder #{reminder_id} for {mention(target_id)}: "{message}" — '
-        f"{display} {your_time(fire_at)} {short_date(fire_at, zone, now)} "
-        f"in <#{channel_id}> (from {creator_name})"
-    )
+    """Shared TASK/FROM header, then one line per reminder (times can differ
+    per target with `their time`)."""
+    lines = [f"Created in <#{channel_id}>", f"TASK: {message}", f"FROM: {creator_name}"]
+    lines += [
+        f"#{c.reminder_id} {mention(c.target_id)}: {c.display} {your_time(c.fire_at)} "
+        f"{short_date(c.fire_at, c.zone, now)}"
+        for c in created
+    ]
+    return "\n".join(lines)
 
 
 def fired(
@@ -57,8 +68,13 @@ def fired(
     fire_at: datetime,
     now: datetime,
 ) -> str:
-    text = f"⏰ {mention(target_id)} — {message} (from {creator_name}, {display}) {your_time(fire_at)}"
+    lines = [
+        f"⏰ {mention(target_id)}",
+        f"TASK: {message}",
+        f"FROM: {creator_name}",
+        f"AT: {display} {your_time(fire_at)}",
+    ]
     if now - fire_at > LATE_AFTER:
         # "-#" is Discord's small-text markdown.
-        text += "\n-# ⚠️ Late: the bot was offline when this was due."
-    return text
+        lines.append("-# ⚠️ Late: the bot was offline when this was due.")
+    return "\n".join(lines)

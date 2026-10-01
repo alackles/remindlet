@@ -84,7 +84,14 @@ Reminders fire in the channel where they were created. The channel is the contex
 
 ### Fired reminder format
 
-> ⏰ @acacia — submit IRB revision (from Elliott, 10:00 AM ET) \[your time: 9:00 AM\]
+```
+⏰ @acacia
+TASK: submit IRB revision
+FROM: Elliott
+AT: 10:00 AM ET [your time: 9:00 AM]
+```
+
+FROM is always shown, even when someone reminds themselves. A reminder delivered late (see Startup recovery) gets a final small-text line: `-# ⚠️ Late: the bot was offline when this was due.`
 
 Followed by interaction buttons (see Interaction UX).
 
@@ -110,9 +117,19 @@ Reasons on reschedule and cancel are optional. If omitted, the note posts withou
 
 When a reminder is created, the bot confirms in the same channel:
 
-> Created reminder #12 for @acacia: "submit IRB revision" — 9:00 AM CT \[your time: 9:00 AM\] Oct 1 in #facct-paper (from Elliott)
+```
+Created in #facct-paper
+TASK: submit IRB revision
+FROM: Elliott
+#12 @acacia: 9:00 AM CT [your time: 9:00 AM] Oct 1
+```
 
-For multi-target reminders, each gets its own ID in the confirmation.
+For multi-target reminders, TASK and FROM appear once and each reminder gets its own line with its own ID, time, and date (times can differ with `their time`):
+
+```
+#12 @acacia: 9:00 AM CT [your time: 9:00 AM] Oct 1
+#13 @elliott: 10:00 AM ET [your time: 9:00 AM] Oct 1
+```
 
 The confirmation pings the targets, so they know something was set for them. The date shows the year only when it isn't the current year.
 

@@ -102,22 +102,18 @@ class Reminders(commands.Cog):
         )
         self.scheduler.wake()
 
-        lines = [
-            formatting.confirmation(
-                reminder_id=rid,
-                target_id=t.id,
-                message=what,
-                display=p.display,
-                fire_at=p.fire_at,
-                zone=p.zone,
-                channel_id=interaction.channel_id,
-                creator_name=_name(interaction.user),
-                now=now,
-            )
-            for rid, t, p in zip(ids, targets, parsed)
-        ]
+        text = formatting.confirmation(
+            message=what,
+            creator_name=_name(interaction.user),
+            channel_id=interaction.channel_id,
+            created=[
+                formatting.Created(rid, t.id, p.display, p.fire_at, p.zone)
+                for rid, t, p in zip(ids, targets, parsed)
+            ],
+            now=now,
+        )
         await interaction.response.send_message(
-            "\n".join(lines), allowed_mentions=discord.AllowedMentions(users=targets)
+            text, allowed_mentions=discord.AllowedMentions(users=targets)
         )
 
     async def fire(self, row: sqlite3.Row) -> None:
