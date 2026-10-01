@@ -16,10 +16,13 @@ Built with discord.py and SQLite. Deployed on a VPS.
 | --- | --- | --- |
 | /timezone set | `/timezone set <zone>` | Set your timezone. Accepts IANA names (`America/Chicago`), with autocomplete suggestions as you type. Required before creating reminders or being the target of one. |
 | /remind | `/remind who:@user when:<time> [qualifier] what:<message> [also:@user] [also2:@user]` | Create a reminder. Time defaults to creator's timezone. Optional qualifier in `when`: `their time`, `my time`, or an explicit timezone. Extra targets in `also`/`also2` create separate linked reminders. Elsewhere this spec abbreviates the syntax as `/remind @acacia 9am do the thing`. |
-| /reschedule | `/reschedule <id> <time> [reason]` | Move a reminder to a new time. Optional reason is posted in the channel. |
-| /cancel | `/cancel <id> [reason]` | Cancel a reminder. Optional reason is posted in the channel. |
-| /snooze | `/snooze <id> <duration>` | Push a reminder back by a duration (`15m`, `1h`, `2h`). Also available as buttons on fired reminders. |
-| /list | `/list [@user] [--from @user]` | List pending reminders. No args = all server reminders. `@user` filters by target. `--from @user` filters by creator. Sorted by fire time, soonest first. |
+| /reschedule | `/reschedule id:<id> when:<time> [reason:<text>]` | Move a reminder to a new time. `when` is read like `/remind`'s, with the person rescheduling as "me": default and `my time` are their zone, `their time` is the target's. Optional reason is posted in the channel. |
+| /cancel | `/cancel id:<id> [reason:<text>]` | Cancel a reminder. Optional reason is posted in the channel. |
+| /snooze | `/snooze id:<id> duration:<duration>` | Push a reminder back by a duration (`15m`, `1h`, `2h`, `1h30m`, `1d`), counted from its due time or from now, whichever is later. Also available as buttons on fired reminders. |
+| /done | `/done id:<id>` | Mark a reminder completed. Same as the Done button, and still works after a restart has made the buttons inert. |
+| /list | `/list [who:@user] [from:@user]` | List open reminders, visible only to the person asking. No args = all server reminders. `who` filters by target, `from` by creator. Two sections: upcoming (sorted by fire time, soonest first), then fired but not marked done. |
+
+In every command that takes an `id`, the field autocompletes with matching open reminders (`#12 acacia: submit IRB revision`). Commands that change a reminder work on any open reminder (`pending`, `snoozed`, or `fired`); a reminder that is `done` or `cancelled` is closed, and acting on it is an error.
 
 ## Timezone System
 
@@ -68,9 +71,9 @@ The bracketed portion is a Discord `<t:UNIX:t>` timestamp that each viewer sees 
 Flat. No ownership hierarchy.
 
 - **Create:** Any server member can create a reminder targeting any other server member (or themselves).
-- **Reschedule:** Any server member can reschedule any pending reminder.
-- **Cancel:** Any server member can cancel any pending reminder.
-- **List:** Any server member can see all pending reminders on the server.
+- **Reschedule / snooze:** Any server member can reschedule or snooze any open reminder.
+- **Cancel / done:** Any server member can cancel or complete any open reminder.
+- **List:** Any server member can see all open reminders on the server.
 
 There is no opt-in or opt-out mechanism for being reminded. On a 3-person research server this is a feature, not a gap. If the server grows, this is the first thing to revisit.
 
@@ -97,12 +100,13 @@ Followed by interaction buttons (see Interaction UX).
 
 ### Audit trail
 
-All state changes post a visible note in the originating channel, in the same labeled-line style as fired reminders. The first line says who did what to which reminder; TASK always follows so the note makes sense on its own. The actor is named without a ping.
+All state changes post a visible note in the originating channel, in the same labeled-line style as fired reminders. The first line says who did what to which reminder. FOR names the target and pings them, unless they made the change themselves. TASK always follows so the note makes sense on its own. The actor is named without a ping. The note posts in the reminder's channel; if the command was run somewhere else, the person who ran it gets a private pointer to it.
 
 **Reschedule:**
 
 ```
 🔄 acacia rescheduled reminder #12
+FOR: @elliott
 TASK: submit IRB revision
 AT: 10:00 AM CT [your time: 10:00 AM]
 REASON: sick
@@ -112,6 +116,7 @@ REASON: sick
 
 ```
 💤 acacia snoozed reminder #12 for 1h
+FOR: @elliott
 TASK: submit IRB revision
 AT: 10:00 AM CT [your time: 10:00 AM]
 ```
@@ -120,6 +125,7 @@ AT: 10:00 AM CT [your time: 10:00 AM]
 
 ```
 ❌ acacia cancelled reminder #12
+FOR: @elliott
 TASK: submit IRB revision
 REASON: Elliott said he's handling it
 ```
@@ -128,10 +134,11 @@ REASON: Elliott said he's handling it
 
 ```
 ✅ acacia completed reminder #12
+FOR: @elliott
 TASK: submit IRB revision
 ```
 
-Reasons on reschedule and cancel are optional. If omitted, the REASON line is left out. AT on reschedule and snooze is the new time, labeled in the zone the reminder was originally given in.
+Reasons on reschedule and cancel are optional. If omitted, the REASON line is left out. AT is the new time. A reschedule is labeled in the zone the new time was given in, which becomes the reminder's display zone; a snooze keeps the reminder's existing display zone.
 
 ### Confirmation on creation
 
@@ -167,10 +174,11 @@ Each reminder has its own ID, fires separately, and can be rescheduled or cancel
 
 ### Light linking
 
-When a reminder with siblings is cancelled or rescheduled, the channel notification ends with an ALSO line for each sibling that is still active:
+When a reminder with siblings is cancelled or rescheduled, the channel notification ends with an ALSO line for each sibling that is still open (not done or cancelled):
 
 ```
 🔄 acacia rescheduled reminder #14
+FOR: @acacia
 TASK: do the thing
 AT: 10:00 AM CT [your time: 10:00 AM]
 REASON: need more time
@@ -205,7 +213,7 @@ The reminder ID (shown in `/list` output and in creation confirmations) is how s
 
 ### Button expiry
 
-Discord buttons are tied to the running bot process. If the bot restarts, buttons on previously sent messages become inert. This is a known Discord limitation. Slash commands remain functional regardless. The bot should handle stale button interactions gracefully — reply with "this reminder has already been handled" or "use `/snooze <id> <duration>` instead" rather than erroring silently.
+Discord buttons are tied to the running bot process. If the bot restarts, buttons on previously sent messages become inert. This is a known Discord limitation. Slash commands remain functional regardless. The bot should handle stale button interactions gracefully — reply with "this reminder has already been handled" or "use `/snooze <id> <duration>` (or `/done <id>`) instead" rather than erroring silently.
 
 ## Data Model
 
@@ -231,7 +239,7 @@ SQLite, single file, deployed alongside the bot.
 | message | TEXT | The reminder text |
 | fire\_at | TEXT | ISO 8601 UTC — internal storage always in UTC |
 | created\_at | TEXT | ISO 8601 UTC |
-| status | TEXT | `pending`, `fired`, `snoozed`, `done`, `cancelled` |
+| status | TEXT | `pending`, `fired`, `snoozed`, `done`, `cancelled`. The first three are open; a fired reminder stays open until someone marks it done or cancels it. Reschedule sets `pending`, snooze sets `snoozed`. |
 | batch\_id | TEXT NULL | Shared UUID for multi-target reminders, NULL for singles |
 | recurrence\_rule | TEXT NULL | Reserved for future recurring reminders, always NULL in v1 |
 | original\_tz | TEXT | IANA zone the time was given in (creator's by default; target's for `their time`; the explicit zone if one was named), for display |
