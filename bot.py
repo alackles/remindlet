@@ -25,6 +25,8 @@ class ReminderBot(commands.Bot):
         super().__init__(
             command_prefix=commands.when_mentioned,
             intents=discord.Intents.default(),
+            # Never ping @everyone/@here or roles, even if reminder text has them.
+            allowed_mentions=discord.AllowedMentions(everyone=False, roles=False, users=True),
         )
         self.guild = discord.Object(id=guild_id)
 
@@ -33,6 +35,7 @@ class ReminderBot(commands.Bot):
         self.db = db.connect(config.DB_PATH)
         log.info("Opened database %s", config.DB_PATH)
         await self.load_extension("cogs.timezone")
+        await self.load_extension("cogs.reminders")
         self.tree.add_command(ping)
         self.tree.copy_global_to(guild=self.guild)
         synced = await self.tree.sync(guild=self.guild)
