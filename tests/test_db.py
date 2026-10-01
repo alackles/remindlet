@@ -221,3 +221,128 @@ def test_reminders_survive_reconnect(db_path):
     conn = db.connect(db_path)
     assert [r["id"] for r in db.due_reminders(conn, T0)] == [rid]
     conn.close()
+
+
+# --- Changing open reminders ---------------------------------------------------
+
+ACTOR = USER  # anyone can change anyone's reminder
+
+
+def log_rows(conn, rid):
+    return conn.execute(
+        "SELECT action, actor_id, reason, old_fire_at, new_fire_at FROM reminder_log "
+        "WHERE reminder_id = ? ORDER BY id",
+        (rid,),
+    ).fetchall()
+
+
+def test_reschedule_moves_time_and_display_zone(conn, people):
+    [rid] = create(conn, new(TARGET))
+    db.mark_fired(conn, rid)  # fired reminders are still open
+    later = T0 + timedelta(days=1)
+    row = db.reschedule(
+        conn, rid, actor_id=ACTOR, fire_at=later, original_tz="America/New_York",
+        original_time_str="11:00 AM ET", reason="sick",
+    )
+    assert row["status"] == "pending"
+    assert db.from_iso(row["fire_at"]) == later
+    assert (row["original_tz"], row["original_time_str"]) == ("America/New_York", "11:00 AM ET")
+    last = log_rows(conn, rid)[-1]
+    assert tuple(last) == ("rescheduled", str(ACTOR), "sick", db.to_iso(T0), db.to_iso(later))
+
+
+def test_snooze_pending_counts_from_due_time(conn, people):
+    [rid] = create(conn, new(TARGET, T0 + timedelta(hours=2)))
+    row = db.snooze(conn, rid, actor_id=ACTOR, duration=timedelta(hours=1), now=T0)
+    assert row["status"] == "snoozed"
+    assert db.from_iso(row["fire_at"]) == T0 + timedelta(hours=3)
+    assert row["original_time_str"] == "10:00 AM CT"  # creation display kept
+
+
+def test_snooze_fired_counts_from_now(conn, people):
+    [rid] = create(conn, new(TARGET))
+    db.mark_fired(conn, rid)
+    now = T0 + timedelta(minutes=40)
+    row = db.snooze(conn, rid, actor_id=ACTOR, duration=timedelta(minutes=15), now=now)
+    assert db.from_iso(row["fire_at"]) == now + timedelta(minutes=15)
+    assert log_rows(conn, rid)[-1]["action"] == "snoozed"
+
+
+def test_snoozed_reminder_fires_again(conn, people):
+    [rid] = create(conn, new(TARGET))
+    db.mark_fired(conn, rid)
+    db.snooze(conn, rid, actor_id=ACTOR, duration=timedelta(hours=1), now=T0)
+    assert [r["id"] for r in db.due_reminders(conn, T0 + timedelta(hours=1))] == [rid]
+
+
+def test_cancel_and_complete_close_the_reminder(conn, people):
+    a, b = create(conn, new(TARGET), new(TARGET))
+    assert db.cancel(conn, a, actor_id=ACTOR, reason="not needed")["status"] == "cancelled"
+    assert db.complete(conn, b, actor_id=TARGET)["status"] == "done"
+    assert db.due_reminders(conn, T0) == []
+    assert tuple(log_rows(conn, a)[-1]) == ("cancelled", str(ACTOR), "not needed", None, None)
+
+
+@pytest.mark.parametrize(
+    "close, closer",
+    [
+        (lambda c, r: db.cancel(c, r, actor_id=ACTOR), ACTOR),
+        (lambda c, r: db.complete(c, r, actor_id=TARGET), TARGET),
+    ],
+)
+def test_closed_reminder_rejects_every_change(conn, people, close, closer):
+    [rid] = create(conn, new(TARGET))
+    close(conn, rid)
+    changes = [
+        lambda: db.reschedule(conn, rid, actor_id=ACTOR, fire_at=T0, original_tz="UTC", original_time_str="x"),
+        lambda: db.snooze(conn, rid, actor_id=ACTOR, duration=timedelta(hours=1), now=T0),
+        lambda: db.cancel(conn, rid, actor_id=ACTOR),
+        lambda: db.complete(conn, rid, actor_id=ACTOR),
+    ]
+    before = len(log_rows(conn, rid))
+    for change in changes:
+        with pytest.raises(db.ReminderClosed) as info:
+            change()
+        assert info.value.closed_by == str(closer)
+    assert len(log_rows(conn, rid)) == before  # nothing logged
+
+
+def test_unknown_reminder(conn):
+    with pytest.raises(db.ReminderNotFound):
+        db.cancel(conn, 999, actor_id=ACTOR)
+
+
+# --- Listing --------------------------------------------------------------------
+
+
+def test_list_open_upcoming_then_fired(conn, people):
+    fired_early = create(conn, new(TARGET, T0 - timedelta(hours=5)))[0]
+    later = create(conn, new(TARGET, T0 + timedelta(hours=2)))[0]
+    sooner = create(conn, new(TARGET, T0 + timedelta(hours=1)))[0]
+    done = create(conn, new(TARGET, T0))[0]
+    db.mark_fired(conn, fired_early)
+    db.complete(conn, done, actor_id=TARGET)
+    assert [r["id"] for r in db.list_open(conn, 6)] == [sooner, later, fired_early]
+
+
+def test_list_open_filters(conn, people):
+    to_target = create(conn, new(TARGET))[0]
+    to_creator = create(conn, new(CREATOR))[0]
+    db.set_timezone(conn, USER, "UTC")
+    from_user = db.create_reminders(
+        conn, creator_id=USER, channel_id=5, guild_id=6, message="m", targets=[new(TARGET)]
+    )[0]
+    ids = lambda rows: sorted(r["id"] for r in rows)
+    assert ids(db.list_open(conn, 6, target_id=TARGET)) == [to_target, from_user]
+    assert ids(db.list_open(conn, 6, creator_id=CREATOR)) == [to_target, to_creator]
+    assert ids(db.list_open(conn, 6, target_id=TARGET, creator_id=USER)) == [from_user]
+    assert db.list_open(conn, 999) == []  # other guilds
+
+
+def test_open_siblings(conn, people):
+    a, b, c = create(conn, new(TARGET), new(CREATOR), new(TARGET))
+    [single] = create(conn, new(TARGET))
+    assert [r["id"] for r in db.open_siblings(conn, db.get_reminder(conn, a))] == [b, c]
+    db.cancel(conn, c, actor_id=ACTOR)
+    assert [r["id"] for r in db.open_siblings(conn, db.get_reminder(conn, a))] == [b]
+    assert db.open_siblings(conn, db.get_reminder(conn, single)) == []
