@@ -7,6 +7,7 @@ from discord import app_commands
 from discord.ext import commands
 
 import config
+import db
 
 log = logging.getLogger("remindlet")
 
@@ -29,6 +30,9 @@ class ReminderBot(commands.Bot):
 
     async def setup_hook(self) -> None:
         # Runs once, before connecting. on_ready can fire again on reconnect.
+        self.db = db.connect(config.DB_PATH)
+        log.info("Opened database %s", config.DB_PATH)
+        await self.load_extension("cogs.timezone")
         self.tree.add_command(ping)
         self.tree.copy_global_to(guild=self.guild)
         synced = await self.tree.sync(guild=self.guild)
@@ -36,6 +40,11 @@ class ReminderBot(commands.Bot):
 
     async def on_ready(self) -> None:
         log.info("Logged in as %s (id %s)", self.user, self.user.id)
+
+    async def close(self) -> None:
+        await super().close()
+        if hasattr(self, "db"):
+            self.db.close()
 
 
 def main() -> None:
