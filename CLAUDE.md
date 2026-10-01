@@ -53,8 +53,8 @@ every change is announced in the channel where the reminder lives.
 - [ ] 3. Create and fire: `/remind` (single and multi-target with batch_id),
       confirmation message, scheduler, firing in channel, startup recovery.
       Done when: a reminder created before a restart still fires after it.
-- [ ] Before 4: Acacia cleans up how reminders read in Discord (confirmation
-      and fired text in `formatting.py`). Acacia does this by hand; don't start M4 first.
+- [x] Before 4: Clean up how reminders read in Discord. Designed together;
+      TASK/FROM/AT labeled lines for all bot messages (see SPEC.md).
 - [ ] 4. Management: `/list` with filters, `/reschedule`, `/cancel`,
       `/snooze`, audit posts, sibling notes.
 - [ ] 5. Buttons: Snooze 15m / 1h / Done / Cancel, stale-button handling,
