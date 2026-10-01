@@ -113,3 +113,111 @@ def test_iso_strings_sort_chronologically():
     times = [base + timedelta(hours=h) for h in (5, -3, 20, 0)]
     times.append(datetime(2026, 10, 1, 13, 0, tzinfo=timezone.utc))
     assert sorted(db.to_iso(t) for t in times) == [db.to_iso(t) for t in sorted(times)]
+
+
+# --- Reminders ---------------------------------------------------------------
+
+T0 = datetime(2026, 10, 1, 15, 0, tzinfo=timezone.utc)
+
+
+@pytest.fixture
+def people(conn):
+    db.set_timezone(conn, CREATOR, "America/New_York")
+    db.set_timezone(conn, TARGET, "America/Chicago")
+
+
+def new(target, fire_at=T0, tz="America/Chicago", display="10:00 AM CT"):
+    return db.NewReminder(target, fire_at, tz, display)
+
+
+def create(conn, *targets):
+    return db.create_reminders(
+        conn, creator_id=CREATOR, channel_id=5, guild_id=6, message="do the thing",
+        targets=list(targets),
+    )
+
+
+def actions(conn, reminder_id):
+    rows = conn.execute(
+        "SELECT action, actor_id FROM reminder_log WHERE reminder_id = ? ORDER BY id",
+        (reminder_id,),
+    )
+    return [tuple(r) for r in rows]
+
+
+def test_create_single_reminder(conn, people):
+    [rid] = create(conn, new(TARGET))
+    row = db.get_reminder(conn, rid)
+    assert row["creator_id"] == str(CREATOR)
+    assert row["target_id"] == str(TARGET)
+    assert row["channel_id"] == "5"
+    assert row["status"] == "pending"
+    assert row["batch_id"] is None
+    assert db.from_iso(row["fire_at"]) == T0
+    assert (row["original_tz"], row["original_time_str"]) == ("America/Chicago", "10:00 AM CT")
+    assert actions(conn, rid) == [("created", str(CREATOR))]
+
+
+def test_multi_target_shares_batch_id_but_keeps_own_times(conn, people):
+    later = T0 + timedelta(hours=1)
+    ids = create(conn, new(TARGET), new(CREATOR, later, "America/New_York", "11:00 AM ET"))
+    a, b = (db.get_reminder(conn, i) for i in ids)
+    assert a["batch_id"] is not None and a["batch_id"] == b["batch_id"]
+    assert a["id"] != b["id"]
+    assert db.from_iso(b["fire_at"]) == later
+
+
+def test_create_is_all_or_nothing(conn):
+    db.set_timezone(conn, CREATOR, "America/New_York")  # TARGET has no timezone
+    with pytest.raises(sqlite3.IntegrityError):
+        create(conn, new(CREATOR), new(TARGET))
+    assert conn.execute("SELECT COUNT(*) FROM reminders").fetchone()[0] == 0
+    assert conn.execute("SELECT COUNT(*) FROM reminder_log").fetchone()[0] == 0
+
+
+def test_next_fire_at_is_soonest_active(conn, people):
+    assert db.next_fire_at(conn) is None
+    first, second = create(conn, new(TARGET, T0 + timedelta(hours=2)), new(TARGET, T0))
+    assert db.next_fire_at(conn) == T0
+    db.mark_fired(conn, second)
+    assert db.next_fire_at(conn) == T0 + timedelta(hours=2)
+
+
+def test_due_reminders(conn, people):
+    late, now_, future = create(
+        conn, new(TARGET, T0 - timedelta(hours=1)), new(TARGET, T0), new(TARGET, T0 + timedelta(seconds=1))
+    )
+    assert [r["id"] for r in db.due_reminders(conn, T0)] == [late, now_]
+
+
+def test_snoozed_reminders_are_still_due(conn, people):
+    [rid] = create(conn, new(TARGET))
+    conn.execute("UPDATE reminders SET status = 'snoozed' WHERE id = ?", (rid,))
+    assert [r["id"] for r in db.due_reminders(conn, T0)] == [rid]
+
+
+@pytest.mark.parametrize("status", ["fired", "done", "cancelled"])
+def test_inactive_reminders_are_never_due(conn, people, status):
+    [rid] = create(conn, new(TARGET))
+    conn.execute("UPDATE reminders SET status = ? WHERE id = ?", (status, rid))
+    assert db.due_reminders(conn, T0) == []
+    assert db.next_fire_at(conn) is None
+
+
+def test_mark_fired_logs_once(conn, people):
+    [rid] = create(conn, new(TARGET))
+    assert db.mark_fired(conn, rid) is True
+    assert db.mark_fired(conn, rid) is False
+    assert db.get_reminder(conn, rid)["status"] == "fired"
+    assert actions(conn, rid) == [("created", str(CREATOR)), ("fired", None)]
+
+
+def test_reminders_survive_reconnect(db_path):
+    conn = db.connect(db_path)
+    db.set_timezone(conn, CREATOR, "America/New_York")
+    db.set_timezone(conn, TARGET, "America/Chicago")
+    [rid] = create(conn, new(TARGET))
+    conn.close()
+    conn = db.connect(db_path)
+    assert [r["id"] for r in db.due_reminders(conn, T0)] == [rid]
+    conn.close()
