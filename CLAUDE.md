@@ -47,7 +47,7 @@ every change is announced in the channel where the reminder lives.
       Done when: the slash command appears and works.
 - [x] 1. Data layer + timezones: SQLite schema per spec; `/timezone set`.
       Done when: a stored timezone survives a bot restart.
-- [ ] 2. Time parser: standalone module, no Discord imports. Handles
+- [x] 2. Time parser: standalone module, no Discord imports. Handles
       natural language, `my time` / `their time`, and explicit zones.
       Done when: tests cover the spec's examples plus unparseable input.
 - [ ] 3. Create and fire: `/remind` (single and multi-target with batch_id),
