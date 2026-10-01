@@ -43,7 +43,7 @@ every change is announced in the channel where the reminder lives.
 
 - [x] 0. Skeleton: bot connects and `/ping` responds in the server.
       Done when: the slash command appears and works.
-- [ ] 1. Data layer + timezones: SQLite schema per spec; `/timezone set`.
+- [x] 1. Data layer + timezones: SQLite schema per spec; `/timezone set`.
       Done when: a stored timezone survives a bot restart.
 - [ ] 2. Time parser: standalone module, no Discord imports. Handles
       natural language, `my time` / `their time`, and explicit zones.
