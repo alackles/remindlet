@@ -37,9 +37,24 @@ Time expressions are parsed with `dateparser` (Python). The creator's stored tim
 
 The qualifier is detected and stripped before the remaining time string is handed to `dateparser`.
 
+With multiple targets, `their time` is resolved per target: `9am their time` fires at 9 AM in each target's own zone.
+
+Accepted explicit zones:
+
+- US abbreviations, which follow daylight saving time: `ET`/`EST`/`EDT` all mean `America/New_York` wall-clock time (so `9am EST` in July is 9 AM on New York clocks). Likewise `CT`/`CST`/`CDT`, `MT`/`MST`/`MDT`, `PT`/`PST`/`PDT`.
+- `UTC` / `GMT`, and whole-hour offsets `UTC±N` / `GMT±N` (fixed, no DST).
+- IANA names, e.g. `Europe/London`.
+
+Rules for the time expression:
+
+- **A time is required.** A date alone (`friday`, `oct 3`, `tomorrow`, `in 3 days`) is rejected with a hint to add one (`friday 9am`). Relative times (`in 2 hours`, `90m`) count as having a time. A bare number (`9`, `at 9`) is rejected as ambiguous.
+- **Time-only input that has already passed today rolls to tomorrow.** `9am` entered at 10:40 AM means 9 AM tomorrow. `today 9am` at 10:40 AM is rejected instead.
+- **Anything else in the past is rejected.**
+- Unparseable input is rejected with example phrasings.
+
 ### Display
 
-Every time display uses a two-part format: the creator's original time with its timezone label, followed by a Discord dynamic timestamp that renders in the viewer's local timezone.
+Every time display uses a two-part format: the time as the creator gave it, labeled with the zone it was given in, followed by a Discord dynamic timestamp that renders in the viewer's local timezone.
 
 Example as seen by someone in Central time:
 
@@ -169,8 +184,8 @@ SQLite, single file, deployed alongside the bot.
 | status | TEXT | `pending`, `fired`, `snoozed`, `done`, `cancelled` |
 | batch\_id | TEXT NULL | Shared UUID for multi-target reminders, NULL for singles |
 | recurrence\_rule | TEXT NULL | Reserved for future recurring reminders, always NULL in v1 |
-| original\_tz | TEXT | Creator's timezone at creation time, for display |
-| original\_time\_str | TEXT | The original time as entered, for display (e.g. "10:00 AM ET") |
+| original\_tz | TEXT | IANA zone the time was given in (creator's by default; target's for `their time`; the explicit zone if one was named), for display |
+| original\_time\_str | TEXT | The time as entered, normalized for display in `original_tz` (e.g. "10:00 AM ET") |
 
 ### `reminder_log` table
 
