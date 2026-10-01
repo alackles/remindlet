@@ -50,7 +50,7 @@ every change is announced in the channel where the reminder lives.
 - [x] 2. Time parser: standalone module, no Discord imports. Handles
       natural language, `my time` / `their time`, and explicit zones.
       Done when: tests cover the spec's examples plus unparseable input.
-- [ ] 3. Create and fire: `/remind` (single and multi-target with batch_id),
+- [x] 3. Create and fire: `/remind` (single and multi-target with batch_id),
       confirmation message, scheduler, firing in channel, startup recovery.
       Done when: a reminder created before a restart still fires after it.
 - [x] Before 4: Clean up how reminders read in Discord. Designed together;
