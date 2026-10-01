@@ -6,8 +6,9 @@ import pytest
 
 import db
 
-ACACIA = 111111111111111111
-ELLIOTT = 222222222222222222
+USER = 111111111111111111
+CREATOR = 222222222222222222
+TARGET = 333333333333333333
 
 
 @pytest.fixture
@@ -57,44 +58,44 @@ def test_mismatched_schema_version_refuses_to_open(db_path):
 
 
 def test_unknown_user_has_no_timezone(conn):
-    assert db.get_timezone(conn, ACACIA) is None
+    assert db.get_timezone(conn, USER) is None
 
 
 def test_set_timezone_returns_previous(conn):
-    assert db.set_timezone(conn, ACACIA, "America/Chicago") is None
-    assert db.set_timezone(conn, ACACIA, "America/New_York") == "America/Chicago"
-    assert db.get_timezone(conn, ACACIA) == "America/New_York"
+    assert db.set_timezone(conn, USER, "America/Chicago") is None
+    assert db.set_timezone(conn, USER, "America/New_York") == "America/Chicago"
+    assert db.get_timezone(conn, USER) == "America/New_York"
 
 
 def test_update_keeps_original_created_at(conn):
-    db.set_timezone(conn, ACACIA, "America/Chicago")
+    db.set_timezone(conn, USER, "America/Chicago")
     first = conn.execute("SELECT created_at FROM users").fetchone()[0]
-    db.set_timezone(conn, ACACIA, "America/New_York")
+    db.set_timezone(conn, USER, "America/New_York")
     assert conn.execute("SELECT created_at FROM users").fetchone()[0] == first
 
 
 def test_timezone_survives_reconnect(db_path):
     # The milestone's "survives a restart" criterion, minus Discord.
     conn = db.connect(db_path)
-    db.set_timezone(conn, ACACIA, "America/Chicago")
+    db.set_timezone(conn, USER, "America/Chicago")
     conn.close()
     conn = db.connect(db_path)
-    assert db.get_timezone(conn, ACACIA) == "America/Chicago"
+    assert db.get_timezone(conn, USER) == "America/Chicago"
     conn.close()
 
 
 def test_reminder_requires_creator_and_target_with_timezone(conn):
-    db.set_timezone(conn, ACACIA, "America/Chicago")
+    db.set_timezone(conn, CREATOR, "America/Chicago")
     with pytest.raises(sqlite3.IntegrityError, match="FOREIGN KEY"):
-        insert_reminder(conn, ACACIA, ELLIOTT)
-    db.set_timezone(conn, ELLIOTT, "America/New_York")
-    assert insert_reminder(conn, ACACIA, ELLIOTT) == 1
+        insert_reminder(conn, CREATOR, TARGET)
+    db.set_timezone(conn, TARGET, "America/New_York")
+    assert insert_reminder(conn, CREATOR, TARGET) == 1
 
 
 def test_invalid_status_rejected(conn):
-    db.set_timezone(conn, ACACIA, "America/Chicago")
+    db.set_timezone(conn, CREATOR, "America/Chicago")
     with pytest.raises(sqlite3.IntegrityError, match="CHECK"):
-        insert_reminder(conn, ACACIA, ACACIA, status="sleeping")
+        insert_reminder(conn, CREATOR, CREATOR, status="sleeping")
 
 
 def test_to_iso_converts_to_utc():
