@@ -62,4 +62,4 @@ every change is announced in the channel where the reminder lives.
 - [x] 5.5. Simplify: this is a small personal bot; cut code, tests, and
       safeguards that cost more than they protect, without losing functionality
       or good practice. Propose a few items at a time, highest priority first.
-- [ ] 6. Deploy: systemd service on the VPS, `.env`, logging.
+- [x] 6. Deploy: systemd service on the VPS, `.env`, logging.
