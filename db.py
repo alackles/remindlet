@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from os import PathLike
 
-from time_parser import format_in_zone
+from formatting import format_in_zone
 
 SCHEMA_VERSION = 1
 

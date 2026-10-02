@@ -5,18 +5,55 @@ Mentions and timestamps are Discord markup: <@id> renders as @name, <#id> as
 #channel, and <t:unix:t> as a time in each viewer's own timezone.
 """
 
+import re
 from collections.abc import Mapping, Sequence
 from datetime import datetime, timedelta
 from typing import Any, NamedTuple
 from zoneinfo import ZoneInfo
-
-from time_parser import format_in_zone
 
 # Fired this long after its time, a reminder is labeled late.
 LATE_AFTER = timedelta(minutes=1)
 
 # Discord's message limit is 2000 characters; leave room for the overflow line.
 LIST_BUDGET = 1900
+
+_LABELS = {
+    "America/New_York": "ET",
+    "US/Eastern": "ET",
+    "America/Chicago": "CT",
+    "US/Central": "CT",
+    "America/Denver": "MT",
+    "US/Mountain": "MT",
+    "America/Los_Angeles": "PT",
+    "US/Pacific": "PT",
+    "UTC": "UTC",
+}
+
+_ETC_OFFSET = re.compile(r"Etc/GMT([+-])(\d+)")
+
+
+def zone_label(zone: str, at: datetime) -> str:
+    """Short label for display: "CT" for America/Chicago, "UTC-6" for Etc/GMT+6."""
+    if label := _LABELS.get(zone):
+        return label
+    if m := _ETC_OFFSET.fullmatch(zone):
+        return f"UTC{'-' if m.group(1) == '+' else '+'}{m.group(2)}"
+    return at.astimezone(ZoneInfo(zone)).strftime("%Z")
+
+
+def format_in_zone(dt: datetime, zone: str) -> str:
+    """Format an aware datetime as a labeled local time, e.g. "9:00 AM CT"."""
+    local = dt.astimezone(ZoneInfo(zone))
+    return f"{local.strftime('%I:%M %p').lstrip('0')} {zone_label(zone, local)}"
+
+
+def format_duration(duration: timedelta) -> str:
+    """Compact form for display: `1h`, `1h 30m`, `2d 3h`."""
+    minutes = int(duration.total_seconds()) // 60
+    days, minutes = divmod(minutes, 1440)
+    hours, minutes = divmod(minutes, 60)
+    parts = [f"{n}{unit}" for n, unit in ((days, "d"), (hours, "h"), (minutes, "m")) if n]
+    return " ".join(parts) or "0m"
 
 
 def mention(user_id: int | str) -> str:

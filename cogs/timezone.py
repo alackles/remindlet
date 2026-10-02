@@ -1,13 +1,13 @@
 """/timezone set."""
 
-from datetime import datetime
-from zoneinfo import ZoneInfo
+from datetime import datetime, timezone
 
 import discord
 from discord import app_commands
 from discord.ext import commands
 
 import db
+import formatting
 import time_parser
 
 
@@ -28,8 +28,7 @@ class Timezone(commands.GroupCog, group_name="timezone"):
             return
 
         previous = db.set_timezone(self.bot.db, interaction.user.id, tz)
-        now = datetime.now(ZoneInfo(tz))
-        local = f"currently {now.strftime('%I:%M %p').lstrip('0')} {now:%Z}"
+        local = f"currently {formatting.format_in_zone(datetime.now(timezone.utc), tz)}"
         who = discord.utils.escape_markdown(interaction.user.display_name)
         if previous is None:
             text = f"🌐 {who} set their timezone to **{tz}** ({local})."

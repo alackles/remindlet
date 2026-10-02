@@ -172,3 +172,43 @@ def test_dm_fallback_line():
         "-# Sent by DM: I can't post in <#42> (Research Server) anymore."
     )
     assert formatting.dm_fallback(42, None) == "-# Sent by DM: I can't post in <#42> anymore."
+
+
+# --- Display -----------------------------------------------------------------
+
+JULY = datetime(2026, 7, 1, 14, 0, tzinfo=timezone.utc)
+JANUARY = datetime(2026, 1, 15, 15, 0, tzinfo=timezone.utc)
+
+
+@pytest.mark.parametrize(
+    "zone, at, label",
+    [
+        ("America/New_York", JULY, "ET"),
+        ("America/Chicago", JANUARY, "CT"),
+        ("UTC", JULY, "UTC"),
+        ("Etc/GMT+6", JULY, "UTC-6"),
+        ("Europe/London", JULY, "BST"),
+        ("Europe/London", JANUARY, "GMT"),
+    ],
+)
+def test_zone_label(zone, at, label):
+    assert formatting.zone_label(zone, at) == label
+
+
+def test_format_in_zone():
+    assert formatting.format_in_zone(JULY, "America/New_York") == "10:00 AM ET"
+    assert formatting.format_in_zone(JANUARY, "America/Chicago") == "9:00 AM CT"
+    assert formatting.format_in_zone(JULY, "Etc/GMT+6") == "8:00 AM UTC-6"
+
+
+@pytest.mark.parametrize(
+    "duration, text",
+    [
+        (timedelta(minutes=15), "15m"),
+        (timedelta(hours=1), "1h"),
+        (timedelta(minutes=90), "1h 30m"),
+        (timedelta(days=2, hours=3), "2d 3h"),
+    ],
+)
+def test_format_duration(duration, text):
+    assert formatting.format_duration(duration) == text

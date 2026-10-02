@@ -302,7 +302,7 @@ class Reminders(commands.Cog):
         if action in SNOOZES:
             length = SNOOZES[action]
             row = db.snooze(conn, rid, actor_id=uid, duration=length, now=datetime.now(timezone.utc))
-            header = f"💤 {actor} snoozed reminder #{rid} for {time_parser.format_duration(length)}"
+            header = f"💤 {actor} snoozed reminder #{rid} for {formatting.format_duration(length)}"
             options = {"show_time": True}
         elif action == "done":
             row = db.complete(conn, rid, actor_id=uid)
@@ -402,7 +402,7 @@ class Reminders(commands.Cog):
             interaction,
             row,
             f"💤 {_name(interaction.user)} snoozed reminder #{row['id']} "
-            f"for {time_parser.format_duration(length)}",
+            f"for {formatting.format_duration(length)}",
             show_time=True,
         )
 
@@ -464,7 +464,7 @@ class Reminders(commands.Cog):
             fire_at = db.from_iso(row["fire_at"])
             when = (
                 f"{formatting.short_date(fire_at, row['original_tz'], now)}, "
-                f"{time_parser.format_in_zone(fire_at, row['original_tz'])}"
+                f"{formatting.format_in_zone(fire_at, row['original_tz'])}"
             )
             who = f"{name}: " if name else ""
             label = f"#{row['id']} {who}{row['message']}"

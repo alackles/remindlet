@@ -9,6 +9,8 @@ from zoneinfo import ZoneInfo
 
 from dateparser.date import DateDataParser
 
+from formatting import format_in_zone
+
 # Shown when the autocomplete box is empty: the zones this server actually uses.
 COMMON_ZONES = (
     "America/New_York",
@@ -27,22 +29,10 @@ _ABBREVIATIONS = {
     **dict.fromkeys(("utc", "gmt"), "UTC"),
 }
 
-_LABELS = {
-    "America/New_York": "ET",
-    "US/Eastern": "ET",
-    "America/Chicago": "CT",
-    "US/Central": "CT",
-    "America/Denver": "MT",
-    "US/Mountain": "MT",
-    "America/Los_Angeles": "PT",
-    "US/Pacific": "PT",
-    "UTC": "UTC",
-}
-
 _QUALIFIER = re.compile(r"\b(their|my)\s+time\b", re.IGNORECASE)
 _OFFSET_SPACING = re.compile(r"\b(utc|gmt)\s*([+-])\s*(\d+)\b", re.IGNORECASE)
 _OFFSET = re.compile(r"(?:utc|gmt)([+-])(\d+)", re.IGNORECASE)
-_ETC_OFFSET = re.compile(r"Etc/GMT([+-])(\d+)")
+
 
 # Does the expression say when in the day? A date alone ("friday") doesn't.
 _CLOCK_TIME = re.compile(
@@ -151,21 +141,6 @@ def extract_zone(text: str, *, creator_tz: str, target_tz: str) -> tuple[str, st
     return (zones[0] if zones else creator_tz), " ".join(remaining)
 
 
-def zone_label(zone: str, at: datetime) -> str:
-    """Short label for display: "CT" for America/Chicago, "UTC-6" for Etc/GMT+6."""
-    if label := _LABELS.get(zone):
-        return label
-    if m := _ETC_OFFSET.fullmatch(zone):
-        return f"UTC{'-' if m.group(1) == '+' else '+'}{m.group(2)}"
-    return at.astimezone(ZoneInfo(zone)).strftime("%Z")
-
-
-def format_in_zone(dt: datetime, zone: str) -> str:
-    """Format an aware datetime as a labeled local time, e.g. "9:00 AM CT"."""
-    local = dt.astimezone(ZoneInfo(zone))
-    return f"{local.strftime('%I:%M %p').lstrip('0')} {zone_label(zone, local)}"
-
-
 def _dateparse(text: str, base: datetime) -> datetime | None:
     """Parse with dateparser relative to a naive base; returns naive or None."""
     parser = DateDataParser(
@@ -250,12 +225,3 @@ def parse_duration(text: str) -> timedelta:
     if total > MAX_SNOOZE:
         raise ParseError("Snoozes are capped at 30 days; use `/reschedule` for longer.")
     return total
-
-
-def format_duration(duration: timedelta) -> str:
-    """Compact form for display: `1h`, `1h 30m`, `2d 3h`."""
-    minutes = int(duration.total_seconds()) // 60
-    days, minutes = divmod(minutes, 1440)
-    hours, minutes = divmod(minutes, 60)
-    parts = [f"{n}{unit}" for n, unit in ((days, "d"), (hours, "h"), (minutes, "m")) if n]
-    return " ".join(parts) or "0m"

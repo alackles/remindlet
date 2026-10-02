@@ -2,17 +2,15 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
+from formatting import format_in_zone
 from time_parser import (
     COMMON_ZONES,
     ParseError,
     extract_zone,
     find_zone,
-    format_duration,
-    format_in_zone,
     parse_duration,
     parse_when,
     suggest_zones,
-    zone_label,
 )
 
 CHICAGO = "America/Chicago"
@@ -102,33 +100,6 @@ def test_extract_zone_rejects_more_than_one_zone(text):
 def test_extract_zone_rejects_impossible_offsets(text):
     with pytest.raises(ParseError, match="range"):
         extract_zone(text, creator_tz=NEW_YORK, target_tz=CHICAGO)
-
-
-# --- Display -----------------------------------------------------------------
-
-JULY = datetime(2026, 7, 1, 14, 0, tzinfo=timezone.utc)
-JANUARY = datetime(2026, 1, 15, 15, 0, tzinfo=timezone.utc)
-
-
-@pytest.mark.parametrize(
-    "zone, at, label",
-    [
-        (NEW_YORK, JULY, "ET"),
-        (CHICAGO, JANUARY, "CT"),
-        ("UTC", JULY, "UTC"),
-        ("Etc/GMT+6", JULY, "UTC-6"),
-        ("Europe/London", JULY, "BST"),
-        ("Europe/London", JANUARY, "GMT"),
-    ],
-)
-def test_zone_label(zone, at, label):
-    assert zone_label(zone, at) == label
-
-
-def test_format_in_zone():
-    assert format_in_zone(JULY, NEW_YORK) == "10:00 AM ET"
-    assert format_in_zone(JANUARY, CHICAGO) == "9:00 AM CT"
-    assert format_in_zone(JULY, "Etc/GMT+6") == "8:00 AM UTC-6"
 
 
 # --- parse_when --------------------------------------------------------------
@@ -281,16 +252,3 @@ def test_parse_duration(text, expected):
 def test_parse_duration_rejects(text):
     with pytest.raises(ParseError):
         parse_duration(text)
-
-
-@pytest.mark.parametrize(
-    "duration, text",
-    [
-        (timedelta(minutes=15), "15m"),
-        (timedelta(hours=1), "1h"),
-        (timedelta(minutes=90), "1h 30m"),
-        (timedelta(days=2, hours=3), "2d 3h"),
-    ],
-)
-def test_format_duration(duration, text):
-    assert format_duration(duration) == text
