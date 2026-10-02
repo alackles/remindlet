@@ -57,6 +57,9 @@ every change is announced in the channel where the reminder lives.
       TASK/FROM/AT labeled lines for all bot messages (see SPEC.md).
 - [x] 4. Management: `/list` with filters, `/reschedule`, `/cancel`,
       `/snooze`, audit posts, sibling notes.
-- [ ] 5. Buttons: Snooze 15m / 1h / Done / Cancel, stale-button handling,
+- [x] 5. Buttons: Snooze 15m / 1h / Done / Cancel, stale-button handling,
       DM fallback when the channel is gone.
+- [ ] Before 6: Simplify. This is a small personal bot; cut code, tests, and
+      safeguards that cost more than they protect, without losing functionality
+      or good practice. Propose a few items at a time, highest priority first.
 - [ ] 6. Deploy: systemd service on the VPS, `.env`, logging.
