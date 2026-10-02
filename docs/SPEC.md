@@ -274,7 +274,7 @@ The log table provides a full history of each reminder. This is useful for debug
 
 ### VPS setup
 
-Run as a systemd service for automatic restart on crash or reboot, using the unit template in `deploy/remindlet.service` (steps in `docs/SETUP.md`). The bot token goes in a `.env` file in the clone's directory, which is gitignored and readable only by its owner. Logs go to the systemd journal (`journalctl -u remindlet`). Only one copy of the bot may run per token.
+Run as a systemd service for automatic restart on crash or reboot, using the unit template in `deploy/remindlet.service` (steps in `docs/SETUP.md`). The bot runs as a dedicated unprivileged `remindlet` user. The bot token goes in a `.env` file in the clone's directory, which is gitignored and readable only by that user. Logs go to the systemd journal (`journalctl -u remindlet`). Only one copy of the bot may run per token.
 
 ### Startup recovery
 
