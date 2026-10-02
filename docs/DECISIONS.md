@@ -40,8 +40,8 @@ Design choices the spec doesn't cover. Format: milestone — choice (convention 
 - M3 — The confirmation's date is shown in the zone the time was given in, matching the time beside it. (judgment call)
 - M3 — At firing, the creator's name comes from an API lookup (no privileged members intent needed), falling back to a mention that doesn't ping. (judgment call)
 - M3 — `/remind` errors (missing timezone, unparseable time, bot targets) are ephemeral, like `/timezone set`. (convention)
-- M4 — All state changes go through one helper, `db._change()`, whose `UPDATE … WHERE status IN (open)` guard makes simultaneous changes safe: only the first wins. (convention)
-- M4 — Acting on a closed reminder raises `ReminderClosed`, carrying who closed it (from `reminder_log`) for the error message. (judgment call)
+- M4 — All state changes go through one helper, `db._change()`, whose `UPDATE … WHERE status IN (open)` guard makes simultaneous changes safe: only the first wins. (convention) **Superseded before M6.**
+- M4 — Acting on a closed reminder raises `ReminderClosed`, carrying who closed it (from `reminder_log`) for the error message. (judgment call) **Superseded before M6.**
 - M4 — Snooze leaves `original_time_str` as entered; the new time is displayed by formatting `fire_at` in `original_tz`. (judgment call)
 - M4 — Snooze durations parsed by our own regex (days/hours/minutes, combinable), not dateparser; capped at 30 days, beyond which `/reschedule` is the right tool. (judgment call)
 - M4 — Displayed times are always computed from `fire_at` in `original_tz`, never read from `original_time_str`, so snoozed reminders show their new time. (convention)
@@ -61,3 +61,4 @@ Design choices the spec doesn't cover. Format: milestone — choice (convention 
 - M5 — The Cancel button's note includes `ALSO:` sibling lines like `/cancel`; snooze and done notes don't, per the spec's light-linking rule. (convention)
 - M5 — Smoke-starting the bot during development uses a scratch `DB_PATH`, after a startup check fired a real pending reminder. (convention)
 - Before 6 — Replaced the event-driven scheduler (wake-ups, sleep-until-next, 60 s cap, injectable clock) with a `discord.ext.tasks` loop that fires whatever is due every 15 s. Reminders can arrive up to 15 s late; startup recovery and send-then-mark are unchanged. (judgment call, correction)
+- Before 6 — State changes are four plain `db` functions (one guarded `UPDATE` plus a log entry each), with no exception classes. The cog checks "is it open?" once before changing anything (`_lookup` for slash commands, `button_problem` for buttons); the SQL status guard just turns a slip into a no-op. Safe because asyncio runs one handler at a time and nothing awaits between check and change. (judgment call, correction)

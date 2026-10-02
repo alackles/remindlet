@@ -3,7 +3,6 @@ reminders, and firing reminders when they come due."""
 
 import logging
 import sqlite3
-from collections.abc import Callable
 from datetime import datetime, timedelta, timezone
 
 import discord
@@ -223,19 +222,22 @@ class Reminders(commands.Cog):
     # --- Changing a reminder -------------------------------------------------------
 
     async def _lookup(self, interaction: discord.Interaction, id_text: str) -> sqlite3.Row | None:
-        """Find a reminder in this server by the `id` option, or reply with why not."""
+        """Find an open reminder in this server by the `id` option, or reply
+        privately with why not and return None."""
         rid = _parse_id(id_text)
         row = db.get_reminder(self.bot.db, rid) if rid is not None else None
         if row is None or row["guild_id"] != str(interaction.guild_id):
-            await interaction.response.send_message(
-                f"There's no reminder `{id_text}`. `/list` shows open ones.", ephemeral=True
-            )
-            return None
-        return row
+            text = f"There's no reminder `{id_text}`. `/list` shows open ones."
+        elif row["status"] not in db.OPEN:
+            text = await self._closed_text(row)
+        else:
+            return row
+        await interaction.response.send_message(text, ephemeral=True)
+        return None
 
-    async def _closed_text(self, row: sqlite3.Row, closer_id: str | None) -> str:
+    async def _closed_text(self, row: sqlite3.Row) -> str:
         text = f"Reminder #{row['id']} was already {CLOSED_VERBS[row['status']]}"
-        if closer_id:
+        if closer_id := db.closed_by(self.bot.db, row["id"]):
             text += f" by {await self._member_name(row['guild_id'], closer_id)}"
         return text + "."
 
@@ -271,22 +273,10 @@ class Reminders(commands.Cog):
         )
         return note, mentions
 
-    async def _apply(
-        self,
-        interaction: discord.Interaction,
-        row: sqlite3.Row,
-        change: Callable[[], sqlite3.Row],
-        header: str,
-        **note_options,
+    async def _announce_change(
+        self, interaction: discord.Interaction, row: sqlite3.Row, header: str, **note_options
     ) -> None:
-        """Run a slash-command state change and announce it in the reminder's channel."""
-        try:
-            row = change()
-        except db.ReminderClosed as e:
-            await interaction.response.send_message(
-                await self._closed_text(e.row, e.closed_by), ephemeral=True
-            )
-            return
+        """Announce a slash-command change (already made) in the reminder's channel."""
         note, mentions = await self._note(row, header, interaction.user.id, **note_options)
         await self._announce(interaction, int(row["channel_id"]), note, mentions)
 
@@ -328,25 +318,24 @@ class Reminders(commands.Cog):
             await self._reject_button(interaction, rid, row, problem)
             return
 
+        # No await between the check above and these changes, so no other
+        # click can slip in between them.
         actor = _name(interaction.user)
         uid = interaction.user.id
         if action in SNOOZES:
             length = SNOOZES[action]
-            change = lambda: db.snooze(conn, rid, actor_id=uid, duration=length, now=datetime.now(timezone.utc))
+            row = db.snooze(conn, rid, actor_id=uid, duration=length, now=datetime.now(timezone.utc))
             header = f"💤 {actor} snoozed reminder #{rid} for {time_parser.format_duration(length)}"
             options = {"show_time": True}
         elif action == "done":
-            change = lambda: db.complete(conn, rid, actor_id=uid)
+            row = db.complete(conn, rid, actor_id=uid)
             header = f"✅ {actor} completed reminder #{rid}"
             options = {}
         else:
-            change = lambda: db.cancel(conn, rid, actor_id=uid)
+            row = db.cancel(conn, rid, actor_id=uid)
             header = f"❌ {actor} cancelled reminder #{rid}"
             options = {"show_siblings": True}
 
-        # No await between the check above and this change, so no other click
-        # can slip in between them.
-        row = change()
         await interaction.response.edit_message(view=None)
         note, mentions = await self._note(row, header, uid, **options)
         if not await self._send_to_channel(int(row["channel_id"]), note, mentions):
@@ -359,7 +348,7 @@ class Reminders(commands.Cog):
         if problem == "missing":
             text = f"Reminder #{rid} no longer exists."
         elif problem == "closed":
-            text = await self._closed_text(row, db.closed_by(self.bot.db, rid))
+            text = await self._closed_text(row)
         else:
             text = (
                 f"Reminder #{rid} has moved since this message. "
@@ -401,13 +390,13 @@ class Reminders(commands.Cog):
         except time_parser.ParseError as e:
             await interaction.response.send_message(str(e), ephemeral=True)
             return
-        await self._apply(
+        row = db.reschedule(
+            self.bot.db, row["id"], actor_id=interaction.user.id, fire_at=parsed.fire_at,
+            original_tz=parsed.zone, original_time_str=parsed.display, reason=reason,
+        )
+        await self._announce_change(
             interaction,
             row,
-            lambda: db.reschedule(
-                self.bot.db, row["id"], actor_id=interaction.user.id, fire_at=parsed.fire_at,
-                original_tz=parsed.zone, original_time_str=parsed.display, reason=reason,
-            ),
             f"🔄 {_name(interaction.user)} rescheduled reminder #{row['id']}",
             show_time=True,
             reason=reason,
@@ -428,13 +417,13 @@ class Reminders(commands.Cog):
         except time_parser.ParseError as e:
             await interaction.response.send_message(str(e), ephemeral=True)
             return
-        await self._apply(
+        row = db.snooze(
+            self.bot.db, row["id"], actor_id=interaction.user.id, duration=length,
+            now=datetime.now(timezone.utc),
+        )
+        await self._announce_change(
             interaction,
             row,
-            lambda: db.snooze(
-                self.bot.db, row["id"], actor_id=interaction.user.id, duration=length,
-                now=datetime.now(timezone.utc),
-            ),
             f"💤 {_name(interaction.user)} snoozed reminder #{row['id']} "
             f"for {time_parser.format_duration(length)}",
             show_time=True,
@@ -454,10 +443,10 @@ class Reminders(commands.Cog):
     ) -> None:
         if (row := await self._lookup(interaction, id_)) is None:
             return
-        await self._apply(
+        row = db.cancel(self.bot.db, row["id"], actor_id=interaction.user.id, reason=reason)
+        await self._announce_change(
             interaction,
             row,
-            lambda: db.cancel(self.bot.db, row["id"], actor_id=interaction.user.id, reason=reason),
             f"❌ {_name(interaction.user)} cancelled reminder #{row['id']}",
             reason=reason,
             show_siblings=True,
@@ -469,10 +458,10 @@ class Reminders(commands.Cog):
     async def done(self, interaction: discord.Interaction, id_: str) -> None:
         if (row := await self._lookup(interaction, id_)) is None:
             return
-        await self._apply(
+        row = db.complete(self.bot.db, row["id"], actor_id=interaction.user.id)
+        await self._announce_change(
             interaction,
             row,
-            lambda: db.complete(self.bot.db, row["id"], actor_id=interaction.user.id),
             f"✅ {_name(interaction.user)} completed reminder #{row['id']}",
         )
 

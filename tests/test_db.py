@@ -281,26 +281,22 @@ def test_cancel_and_complete_close_the_reminder(conn, people):
         (lambda c, r: db.complete(c, r, actor_id=TARGET), TARGET),
     ],
 )
-def test_closed_reminder_rejects_every_change(conn, people, close, closer):
+def test_closed_reminder_is_left_alone(conn, people, close, closer):
+    # Callers check first; the status guard makes a slip a no-op, not a reopen.
     [rid] = create(conn, new(TARGET))
     close(conn, rid)
-    changes = [
-        lambda: db.reschedule(conn, rid, actor_id=ACTOR, fire_at=T0, original_tz="UTC", original_time_str="x"),
-        lambda: db.snooze(conn, rid, actor_id=ACTOR, duration=timedelta(hours=1), now=T0),
-        lambda: db.cancel(conn, rid, actor_id=ACTOR),
-        lambda: db.complete(conn, rid, actor_id=ACTOR),
-    ]
-    before = len(log_rows(conn, rid))
-    for change in changes:
-        with pytest.raises(db.ReminderClosed) as info:
-            change()
-        assert info.value.closed_by == str(closer)
-    assert len(log_rows(conn, rid)) == before  # nothing logged
+    before = (tuple(db.get_reminder(conn, rid)), len(log_rows(conn, rid)))
+    db.reschedule(conn, rid, actor_id=ACTOR, fire_at=T0, original_tz="UTC", original_time_str="x")
+    db.snooze(conn, rid, actor_id=ACTOR, duration=timedelta(hours=1), now=T0)
+    db.cancel(conn, rid, actor_id=ACTOR)
+    db.complete(conn, rid, actor_id=ACTOR)
+    assert (tuple(db.get_reminder(conn, rid)), len(log_rows(conn, rid))) == before
+    assert db.closed_by(conn, rid) == str(closer)
 
 
-def test_unknown_reminder(conn):
-    with pytest.raises(db.ReminderNotFound):
-        db.cancel(conn, 999, actor_id=ACTOR)
+def test_closed_by_is_none_while_open(conn, people):
+    [rid] = create(conn, new(TARGET))
+    assert db.closed_by(conn, rid) is None
 
 
 # --- Listing --------------------------------------------------------------------

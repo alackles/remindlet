@@ -216,21 +216,6 @@ def mark_fired(conn: sqlite3.Connection, reminder_id: int) -> bool:
 # --- Changing open reminders -------------------------------------------------
 
 
-class ReminderNotFound(LookupError):
-    def __init__(self, reminder_id: int) -> None:
-        super().__init__(f"no reminder #{reminder_id}")
-        self.reminder_id = reminder_id
-
-
-class ReminderClosed(ValueError):
-    """The reminder is done or cancelled; closed_by is who did it (if logged)."""
-
-    def __init__(self, row: sqlite3.Row, closed_by: str | None) -> None:
-        super().__init__(f"reminder #{row['id']} is {row['status']}")
-        self.row = row
-        self.closed_by = closed_by
-
-
 def closed_by(conn: sqlite3.Connection, reminder_id: int) -> str | None:
     """Discord ID of whoever marked the reminder done or cancelled it, if anyone."""
     row = conn.execute(
@@ -244,43 +229,30 @@ def closed_by(conn: sqlite3.Connection, reminder_id: int) -> str | None:
     return row["actor_id"] if row else None
 
 
-def _change(
+def _update_open(
     conn: sqlite3.Connection,
     reminder_id: int,
-    *,
-    status: str,
     action: str,
     actor_id: int,
+    assignments: str,
+    params: tuple = (),
+    *,
     reason: str | None = None,
-    new_fire_at=None,
-    **columns,
+    old: str | None = None,
+    new: str | None = None,
 ) -> sqlite3.Row:
-    """Apply one state change to an open reminder, log it, and return the new row.
+    """Update a reminder if it's still open, log the action, return the row.
 
-    new_fire_at is a function of the current row, so snooze can compute from
-    the stored time inside the same transaction.
+    Callers check that the reminder is open first (so they can explain if it
+    isn't); the status guard here just makes a closed reminder a no-op.
     """
     with conn:
-        row = get_reminder(conn, reminder_id)
-        if row is None:
-            raise ReminderNotFound(reminder_id)
-        if row["status"] not in OPEN:
-            raise ReminderClosed(row, closed_by(conn, reminder_id))
-
-        old = row["fire_at"]
-        new = to_iso(new_fire_at(row)) if new_fire_at else None
-        updates = {"status": status, **columns}
-        if new:
-            updates["fire_at"] = new
-        assignments = ", ".join(f"{col} = ?" for col in updates)
-        conn.execute(
+        cur = conn.execute(
             f"UPDATE reminders SET {assignments} WHERE id = ? AND status IN {OPEN}",
-            (*updates.values(), reminder_id),
+            (*params, reminder_id),
         )
-        _log(
-            conn, reminder_id, action, str(actor_id), reason=reason,
-            old=old if new else None, new=new,
-        )
+        if cur.rowcount:
+            _log(conn, reminder_id, action, str(actor_id), reason=reason, old=old, new=new)
     return get_reminder(conn, reminder_id)
 
 
@@ -295,10 +267,12 @@ def reschedule(
     reason: str | None = None,
 ) -> sqlite3.Row:
     """Move to a new time; the new time's zone becomes the display zone."""
-    return _change(
-        conn, reminder_id, status="pending", action="rescheduled", actor_id=actor_id,
-        reason=reason, new_fire_at=lambda row: fire_at,
-        original_tz=original_tz, original_time_str=original_time_str,
+    old, new = get_reminder(conn, reminder_id)["fire_at"], to_iso(fire_at)
+    return _update_open(
+        conn, reminder_id, "rescheduled", actor_id,
+        "status = 'pending', fire_at = ?, original_tz = ?, original_time_str = ?",
+        (new, original_tz, original_time_str),
+        reason=reason, old=old, new=new,
     )
 
 
@@ -315,22 +289,22 @@ def snooze(
     original_time_str is left as entered at creation; display the new time
     with time_parser.format_in_zone(fire_at, original_tz).
     """
-    return _change(
-        conn, reminder_id, status="snoozed", action="snoozed", actor_id=actor_id,
-        new_fire_at=lambda row: max(from_iso(row["fire_at"]), now) + duration,
+    old = get_reminder(conn, reminder_id)["fire_at"]
+    new = to_iso(max(from_iso(old), now) + duration)
+    return _update_open(
+        conn, reminder_id, "snoozed", actor_id, "status = 'snoozed', fire_at = ?", (new,),
+        old=old, new=new,
     )
 
 
 def cancel(
     conn: sqlite3.Connection, reminder_id: int, *, actor_id: int, reason: str | None = None
 ) -> sqlite3.Row:
-    return _change(
-        conn, reminder_id, status="cancelled", action="cancelled", actor_id=actor_id, reason=reason
-    )
+    return _update_open(conn, reminder_id, "cancelled", actor_id, "status = 'cancelled'", reason=reason)
 
 
 def complete(conn: sqlite3.Connection, reminder_id: int, *, actor_id: int) -> sqlite3.Row:
-    return _change(conn, reminder_id, status="done", action="done", actor_id=actor_id)
+    return _update_open(conn, reminder_id, "done", actor_id, "status = 'done'")
 
 
 # --- Listing ------------------------------------------------------------------
