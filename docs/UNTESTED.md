@@ -15,3 +15,14 @@ the missing-timezone, bot, and multi-target paths in `cogs/reminders.py` have no
    → "Nothing was created…" naming them.
 4. `/remind who:@you when:in 5 minutes their time what:multi also:@someone-with-a-timezone`
    → one public confirmation: TASK/FROM once, then a `#id` line for each person; it pings them.
+
+## M4: `others` (sibling ALSO lines, and pings when changing someone else's reminder)
+
+Not run in Discord; needs a second member with a timezone set. Partly covered by automated
+tests: `test_open_siblings` (which siblings count as open) and `test_reschedule_note_matches_spec`
+(ALSO line text). The ping rule (FOR pings the target unless they made the change) is only in
+`cogs/reminders.py` and has no automated test.
+
+1. `/remind who:@you when:in 1 hour what:sibling test also:@them`.
+2. Cancel *your* copy → the note ends with `ALSO: <their name>'s copy #N is still active`.
+3. Cancel *their* copy → the note **pings them** via the `FOR:` line.

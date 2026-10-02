@@ -55,7 +55,7 @@ every change is announced in the channel where the reminder lives.
       Done when: a reminder created before a restart still fires after it.
 - [x] Before 4: Clean up how reminders read in Discord. Designed together;
       TASK/FROM/AT labeled lines for all bot messages (see SPEC.md).
-- [ ] 4. Management: `/list` with filters, `/reschedule`, `/cancel`,
+- [x] 4. Management: `/list` with filters, `/reschedule`, `/cancel`,
       `/snooze`, audit posts, sibling notes.
 - [ ] 5. Buttons: Snooze 15m / 1h / Done / Cancel, stale-button handling,
       DM fallback when the channel is gone.
