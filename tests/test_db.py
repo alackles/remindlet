@@ -14,7 +14,7 @@ def batch(conn, *targets):
     """One /remind with several targets: (target_id, fire_at) pairs."""
     return db.create_reminders(
         conn, creator_id=CREATOR, channel_id=5, guild_id=6, message="do the thing",
-        targets=[db.NewReminder(t, at, "America/Chicago", "x") for t, at in targets],
+        targets=[db.NewReminder(t, at, "America/Chicago") for t, at in targets],
     )
 
 
@@ -67,6 +67,7 @@ def test_create_single_reminder(conn):
     assert (row["creator_id"], row["target_id"], row["status"]) == (str(CREATOR), str(TARGET), "pending")
     assert row["batch_id"] is None
     assert db.from_iso(row["fire_at"]) == T0
+    assert row["original_time_str"] == "10:00 AM CT"  # filled in by db
     assert log_rows(conn, rid) == [("created", str(CREATOR), None, None, None)]
 
 
@@ -108,10 +109,11 @@ def test_reschedule_moves_time_and_display_zone(conn):
     db.mark_fired(conn, rid)  # fired reminders are still open
     later = T0 + timedelta(days=1)
     row = db.reschedule(
-        conn, rid, actor_id=ACTOR, fire_at=later, original_tz="America/New_York",
-        original_time_str="11:00 AM ET", reason="sick",
+        conn, rid, actor_id=ACTOR, fire_at=later, original_tz="America/New_York", reason="sick",
     )
-    assert (row["status"], row["original_tz"]) == ("pending", "America/New_York")
+    assert (row["status"], row["original_tz"], row["original_time_str"]) == (
+        "pending", "America/New_York", "11:00 AM ET"
+    )
     assert db.from_iso(row["fire_at"]) == later
     assert log_rows(conn, rid)[-1] == ("rescheduled", str(ACTOR), "sick", db.to_iso(T0), db.to_iso(later))
 
@@ -146,7 +148,7 @@ def test_closed_reminder_is_left_alone(conn):
     assert db.closed_by(conn, rid) is None
     db.complete(conn, rid, actor_id=TARGET)
     before = (tuple(db.get_reminder(conn, rid)), len(log_rows(conn, rid)))
-    db.reschedule(conn, rid, actor_id=ACTOR, fire_at=T0, original_tz="UTC", original_time_str="x")
+    db.reschedule(conn, rid, actor_id=ACTOR, fire_at=T0, original_tz="UTC")
     db.snooze(conn, rid, actor_id=ACTOR, duration=timedelta(hours=1), now=T0)
     db.cancel(conn, rid, actor_id=ACTOR)
     assert (tuple(db.get_reminder(conn, rid)), len(log_rows(conn, rid))) == before
@@ -168,7 +170,7 @@ def test_list_open_filters(conn):
     db.set_timezone(conn, USER, "UTC")
     [from_user] = db.create_reminders(
         conn, creator_id=USER, channel_id=5, guild_id=6, message="m",
-        targets=[db.NewReminder(TARGET, T0, "UTC", "x")],
+        targets=[db.NewReminder(TARGET, T0, "UTC")],
     )
     ids = lambda rows: sorted(r["id"] for r in rows)
     assert ids(db.list_open(conn, 6, target_id=TARGET)) == [to_target, from_user]

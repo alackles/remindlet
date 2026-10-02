@@ -64,7 +64,6 @@ class ParseError(ValueError):
 class ParsedTime:
     fire_at: datetime  # aware, UTC
     zone: str  # IANA zone the time was given in (reminders.original_tz)
-    display: str  # e.g. "9:00 AM CT" (reminders.original_time_str)
 
 
 @cache
@@ -225,7 +224,7 @@ def parse_when(text: str, *, creator_tz: str, target_tz: str, now: datetime) -> 
 
     if fire_at <= now:
         raise ParseError(f"`{text}` is in the past ({format_in_zone(fire_at, zone)}).")
-    return ParsedTime(fire_at=fire_at, zone=zone, display=format_in_zone(fire_at, zone))
+    return ParsedTime(fire_at=fire_at, zone=zone)
 
 
 _DURATION_PART = re.compile(

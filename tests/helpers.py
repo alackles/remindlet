@@ -14,6 +14,6 @@ def add(conn, fire_at=T0, target=TARGET):
     """Create one reminder from CREATOR and return its ID."""
     [rid] = db.create_reminders(
         conn, creator_id=CREATOR, channel_id=5, guild_id=6, message="do the thing",
-        targets=[db.NewReminder(target, fire_at, "America/Chicago", "10:00 AM CT")],
+        targets=[db.NewReminder(target, fire_at, "America/Chicago")],
     )
     return rid

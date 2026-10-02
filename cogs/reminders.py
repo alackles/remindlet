@@ -179,7 +179,7 @@ class Reminders(commands.Cog):
             guild_id=interaction.guild_id,
             message=what,
             targets=[
-                db.NewReminder(t.id, p.fire_at, p.zone, p.display) for t, p in zip(targets, parsed)
+                db.NewReminder(t.id, p.fire_at, p.zone) for t, p in zip(targets, parsed)
             ],
         )
 
@@ -369,7 +369,7 @@ class Reminders(commands.Cog):
             return
         row = db.reschedule(
             self.bot.db, row["id"], actor_id=interaction.user.id, fire_at=parsed.fire_at,
-            original_tz=parsed.zone, original_time_str=parsed.display, reason=reason,
+            original_tz=parsed.zone, reason=reason,
         )
         await self._announce_change(
             interaction,

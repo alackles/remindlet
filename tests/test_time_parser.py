@@ -177,7 +177,7 @@ def test_parse_when(text, fire_at, zone, display):
     result = parse(text)
     assert result.fire_at == fire_at
     assert result.zone == zone
-    assert result.display == display
+    assert format_in_zone(result.fire_at, result.zone) == display
 
 
 def test_passed_time_today_rolls_to_tomorrow():
@@ -209,7 +209,7 @@ def test_relative_time_across_dst_change_is_real_elapsed_time():
     night = utc(2026, 11, 1, 5, 30)
     result = parse("in 2 hours", now=night, creator_tz=CHICAGO)
     assert result.fire_at == utc(2026, 11, 1, 7, 30)
-    assert result.display == "1:30 AM CT"
+    assert format_in_zone(result.fire_at, result.zone) == "1:30 AM CT"
 
 
 @pytest.mark.parametrize("text", ["friday", "tomorrow", "oct 3", "in 3 days", "next week"])

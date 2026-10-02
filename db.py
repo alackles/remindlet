@@ -11,6 +11,8 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from os import PathLike
 
+from time_parser import format_in_zone
+
 SCHEMA_VERSION = 1
 
 # Wrapped in an explicit transaction because executescript() bypasses
@@ -127,7 +129,6 @@ class NewReminder:
     target_id: int
     fire_at: datetime
     original_tz: str
-    original_time_str: str
 
 
 def _log(conn, reminder_id, action, actor_id, *, reason=None, old=None, new=None):
@@ -177,7 +178,7 @@ def create_reminders(
                     created_at,
                     batch_id,
                     t.original_tz,
-                    t.original_time_str,
+                    format_in_zone(t.fire_at, t.original_tz),
                 ),
             )
             ids.append(cur.lastrowid)
@@ -263,7 +264,6 @@ def reschedule(
     actor_id: int,
     fire_at: datetime,
     original_tz: str,
-    original_time_str: str,
     reason: str | None = None,
 ) -> sqlite3.Row:
     """Move to a new time; the new time's zone becomes the display zone."""
@@ -271,7 +271,7 @@ def reschedule(
     return _update_open(
         conn, reminder_id, "rescheduled", actor_id,
         "status = 'pending', fire_at = ?, original_tz = ?, original_time_str = ?",
-        (new, original_tz, original_time_str),
+        (new, original_tz, format_in_zone(fire_at, original_tz)),
         reason=reason, old=old, new=new,
     )
 
@@ -286,8 +286,8 @@ def snooze(
 ) -> sqlite3.Row:
     """Push back by duration from the due time or now, whichever is later.
 
-    original_time_str is left as entered at creation; display the new time
-    with time_parser.format_in_zone(fire_at, original_tz).
+    original_time_str keeps the time as given; displays compute the new time
+    with format_in_zone(fire_at, original_tz).
     """
     old = get_reminder(conn, reminder_id)["fire_at"]
     new = to_iso(max(from_iso(old), now) + duration)
