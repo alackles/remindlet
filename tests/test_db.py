@@ -53,6 +53,35 @@ def test_data_survives_reconnect(tmp_path):
     conn.close()
 
 
+def test_migrates_version_1_snoozed_to_pending(tmp_path):
+    # Build a version-1 database: same tables, but 'snoozed' was a status.
+    path = tmp_path / "v1.db"
+    v1 = sqlite3.connect(path)
+    v1.executescript(
+        db.SCHEMA.replace("'pending', 'fired', 'done'", "'pending', 'fired', 'snoozed', 'done'")
+        .replace(f"user_version = {db.SCHEMA_VERSION}", "user_version = 1")
+    )
+    v1.execute("INSERT INTO users VALUES ('1', 'UTC', 'x')")
+    v1.execute(
+        "INSERT INTO reminders (creator_id, target_id, channel_id, guild_id, message, fire_at,"
+        " created_at, status, original_tz, original_time_str)"
+        " VALUES ('1', '1', '5', '6', 'm', ?, 'x', 'snoozed', 'UTC', 'x')",
+        (db.to_iso(T0),),
+    )
+    v1.execute("INSERT INTO reminder_log (reminder_id, action, timestamp) VALUES (1, 'snoozed', 'x')")
+    v1.commit()
+    v1.close()
+
+    conn = db.connect(path)
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == 2
+    assert db.get_reminder(conn, 1)["status"] == "pending"
+    assert [r["id"] for r in db.due_reminders(conn, T0)] == [1]  # still scheduled
+    assert len(log_rows(conn, 1)) == 1  # history kept
+    with pytest.raises(sqlite3.IntegrityError, match="CHECK"):
+        conn.execute("UPDATE reminders SET status = 'snoozed' WHERE id = 1")
+    conn.close()
+
+
 def test_to_iso_stores_utc():
     chicago = datetime(2026, 10, 1, 9, 0, tzinfo=ZoneInfo("America/Chicago"))
     assert db.to_iso(chicago) == "2026-10-01T14:00:00+00:00"
@@ -121,7 +150,7 @@ def test_reschedule_moves_time_and_display_zone(conn):
 def test_snooze_pending_counts_from_due_time(conn):
     rid = add(conn, T0 + timedelta(hours=2))
     row = db.snooze(conn, rid, actor_id=ACTOR, duration=timedelta(hours=1), now=T0)
-    assert row["status"] == "snoozed"
+    assert row["status"] == "pending"
     assert db.from_iso(row["fire_at"]) == T0 + timedelta(hours=3)
 
 

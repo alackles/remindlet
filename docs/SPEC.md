@@ -22,7 +22,7 @@ Built with discord.py and SQLite. Deployed on a VPS.
 | /done | `/done id:<id>` | Mark a reminder completed. Same as the Done button, and still works after a restart has made the buttons inert. |
 | /list | `/list [who:@user] [from:@user]` | List open reminders, visible only to the person asking. No args = all server reminders. `who` filters by target, `from` by creator. Two sections: upcoming (sorted by fire time, soonest first), then fired but not marked done. |
 
-In every command that takes an `id`, the field autocompletes with matching open reminders (`#12 acacia: submit IRB revision`). Commands that change a reminder work on any open reminder (`pending`, `snoozed`, or `fired`); a reminder that is `done` or `cancelled` is closed, and acting on it is an error.
+In every command that takes an `id`, the field autocompletes with matching open reminders (`#12 acacia: submit IRB revision`). Commands that change a reminder work on any open reminder (`pending` or `fired`); a reminder that is `done` or `cancelled` is closed, and acting on it is an error.
 
 ## Timezone System
 
@@ -241,7 +241,7 @@ SQLite, single file, deployed alongside the bot.
 | message | TEXT | The reminder text |
 | fire\_at | TEXT | ISO 8601 UTC — internal storage always in UTC |
 | created\_at | TEXT | ISO 8601 UTC |
-| status | TEXT | `pending`, `fired`, `snoozed`, `done`, `cancelled`. The first three are open; a fired reminder stays open until someone marks it done or cancels it. Reschedule sets `pending`, snooze sets `snoozed`. |
+| status | TEXT | `pending` (waiting to fire), `fired`, `done`, `cancelled`. The first two are open; a fired reminder stays open until someone marks it done or cancels it. Reschedule and snooze both set `pending`; the log records which happened. |
 | batch\_id | TEXT NULL | Shared UUID for multi-target reminders, NULL for singles |
 | recurrence\_rule | TEXT NULL | Reserved for future recurring reminders, always NULL in v1 |
 | original\_tz | TEXT | IANA zone the time was given in (creator's by default; target's for `their time`; the explicit zone if one was named), for display |
@@ -278,7 +278,7 @@ Run as a systemd service for automatic restart on crash or reboot. The bot token
 
 ### Startup recovery
 
-On startup, the bot queries all `pending` and `snoozed` reminders from the database and re-registers their fire times with the scheduler. This handles bot restarts without losing track of pending reminders.
+The database is the schedule: every 15 seconds the bot fires all `pending` reminders whose time has come. The first pass after a restart therefore picks up anything that came due while the bot was down, with no separate recovery step.
 
 Reminders that came due while the bot was offline fire immediately on startup, with a note that they are late so the arrival time isn't mistaken for the time they were set for.
 

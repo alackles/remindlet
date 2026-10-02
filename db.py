@@ -13,20 +13,12 @@ from os import PathLike
 
 from formatting import format_in_zone
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
-# Wrapped in an explicit transaction because executescript() bypasses
-# sqlite3's implicit transaction handling.
-SCHEMA = f"""
-BEGIN;
 
-CREATE TABLE users (
-    discord_id TEXT PRIMARY KEY,
-    timezone   TEXT NOT NULL,
-    created_at TEXT NOT NULL
-);
-
-CREATE TABLE reminders (
+def _reminders_table(name: str) -> str:
+    return f"""
+CREATE TABLE {name} (
     id                INTEGER PRIMARY KEY AUTOINCREMENT,
     creator_id        TEXT NOT NULL REFERENCES users (discord_id),
     target_id         TEXT NOT NULL REFERENCES users (discord_id),
@@ -36,14 +28,29 @@ CREATE TABLE reminders (
     fire_at           TEXT NOT NULL,
     created_at        TEXT NOT NULL,
     status            TEXT NOT NULL DEFAULT 'pending'
-        CHECK (status IN ('pending', 'fired', 'snoozed', 'done', 'cancelled')),
+        CHECK (status IN ('pending', 'fired', 'done', 'cancelled')),
     batch_id          TEXT,
     recurrence_rule   TEXT,
     original_tz       TEXT NOT NULL,
     original_time_str TEXT NOT NULL
 );
+"""
 
-CREATE INDEX reminders_status_fire_at ON reminders (status, fire_at);
+
+_REMINDERS_INDEX = "CREATE INDEX reminders_status_fire_at ON reminders (status, fire_at);"
+
+# Wrapped in explicit transactions because executescript() bypasses
+# sqlite3's implicit transaction handling.
+SCHEMA = f"""
+BEGIN;
+
+CREATE TABLE users (
+    discord_id TEXT PRIMARY KEY,
+    timezone   TEXT NOT NULL,
+    created_at TEXT NOT NULL
+);
+{_reminders_table("reminders")}
+{_REMINDERS_INDEX}
 
 CREATE TABLE reminder_log (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -59,6 +66,21 @@ CREATE TABLE reminder_log (
 
 PRAGMA user_version = {SCHEMA_VERSION};
 
+COMMIT;
+"""
+
+# Version 1 had a 'snoozed' status that behaved exactly like 'pending'. SQLite
+# can't alter a CHECK constraint, so the table is rebuilt (SQLite's documented
+# recipe), which must run with foreign keys off.
+MIGRATE_1_TO_2 = f"""
+BEGIN;
+UPDATE reminders SET status = 'pending' WHERE status = 'snoozed';
+{_reminders_table("reminders_new")}
+INSERT INTO reminders_new SELECT * FROM reminders;
+DROP TABLE reminders;
+ALTER TABLE reminders_new RENAME TO reminders;
+{_REMINDERS_INDEX}
+PRAGMA user_version = 2;
 COMMIT;
 """
 
@@ -80,18 +102,21 @@ def from_iso(text: str) -> datetime:
 
 
 def connect(path: str | PathLike) -> sqlite3.Connection:
-    """Open the database, enabling foreign keys and creating the schema if new."""
+    """Open the database: create the schema if new, migrate it if old, and
+    enable foreign keys (after any migration, which needs them off)."""
     conn = sqlite3.connect(path)
     conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA foreign_keys = ON")
     version = conn.execute("PRAGMA user_version").fetchone()[0]
     if version == 0:
         conn.executescript(SCHEMA)
+    elif version == 1:
+        conn.executescript(MIGRATE_1_TO_2)
     elif version != SCHEMA_VERSION:
         conn.close()
         raise RuntimeError(
             f"database schema version {version} does not match code version {SCHEMA_VERSION}"
         )
+    conn.execute("PRAGMA foreign_keys = ON")
     return conn
 
 
@@ -118,8 +143,9 @@ def set_timezone(conn: sqlite3.Connection, discord_id: int, tz: str) -> str | No
 
 # --- Reminders ----------------------------------------------------------------
 
-ACTIVE = ("pending", "snoozed")  # statuses the scheduler still has to fire
-OPEN = ("pending", "snoozed", "fired")  # not yet done or cancelled
+# 'pending' reminders are waiting to fire; 'fired' ones stay open until
+# someone marks them done or cancels them.
+OPEN = ("pending", "fired")
 
 
 @dataclass(frozen=True)
@@ -191,11 +217,11 @@ def get_reminder(conn: sqlite3.Connection, reminder_id: int) -> sqlite3.Row | No
 
 
 def due_reminders(conn: sqlite3.Connection, now: datetime) -> list[sqlite3.Row]:
-    """Active reminders whose fire time has arrived, oldest first."""
+    """Pending reminders whose fire time has arrived, oldest first."""
     return conn.execute(
         f"""
         SELECT * FROM reminders
-        WHERE status IN {ACTIVE} AND fire_at <= ?
+        WHERE status = 'pending' AND fire_at <= ?
         ORDER BY fire_at, id
         """,
         (to_iso(now),),
@@ -203,10 +229,10 @@ def due_reminders(conn: sqlite3.Connection, now: datetime) -> list[sqlite3.Row]:
 
 
 def mark_fired(conn: sqlite3.Connection, reminder_id: int) -> bool:
-    """Move an active reminder to 'fired'. Returns False if it wasn't active."""
+    """Move a pending reminder to 'fired'. Returns False if it wasn't pending."""
     with conn:
         cur = conn.execute(
-            f"UPDATE reminders SET status = 'fired' WHERE id = ? AND status IN {ACTIVE}",
+            "UPDATE reminders SET status = 'fired' WHERE id = ? AND status = 'pending'",
             (reminder_id,),
         )
         if cur.rowcount:
@@ -292,7 +318,7 @@ def snooze(
     old = get_reminder(conn, reminder_id)["fire_at"]
     new = to_iso(max(from_iso(old), now) + duration)
     return _update_open(
-        conn, reminder_id, "snoozed", actor_id, "status = 'snoozed', fire_at = ?", (new,),
+        conn, reminder_id, "snoozed", actor_id, "status = 'pending', fire_at = ?", (new,),
         old=old, new=new,
     )
 
