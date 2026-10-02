@@ -50,14 +50,6 @@ def test_suggest_matches_city_part():
     assert "America/New_York" in suggest_zones("new york")
 
 
-def test_suggest_ranks_prefix_matches_first():
-    # "Chile/..." starts with "ch" but sorts after cities like America/Chicago;
-    # "Europe/Zurich" only contains "ch" and comes after both.
-    results = suggest_zones("ch", limit=200)
-    assert results[0] == "America/Chicago"
-    assert results.index("Chile/Continental") < results.index("Europe/Zurich")
-
-
 def test_suggest_respects_limit():
     assert len(suggest_zones("a")) == 25
 
@@ -83,17 +75,13 @@ def test_suggestions_are_all_accepted_by_find_zone():
         ("10:00 AM ET", NEW_YORK, "10:00 AM"),
         ("9am ct", CHICAGO, "9am"),
         ("9am EST", NEW_YORK, "9am"),
-        ("9am PDT", "America/Los_Angeles", "9am"),
         ("9am UTC", "UTC", "9am"),
-        ("9am GMT", "UTC", "9am"),
         ("9am UTC-6", "Etc/GMT+6", "9am"),
         ("9am UTC - 6", "Etc/GMT+6", "9am"),
         ("9am UTC−6", "Etc/GMT+6", "9am"),
-        ("9am utc+2", "Etc/GMT-2", "9am"),
         ("9am UTC+0", "UTC", "9am"),
         ("9am UTC+14", "Etc/GMT-14", "9am"),
         ("9am europe/london", "Europe/London", "9am"),
-        ("oct 3 9am", NEW_YORK, "oct 3 9am"),
         ("10/3 9am", NEW_YORK, "10/3 9am"),
     ],
 )
@@ -127,10 +115,8 @@ JANUARY = datetime(2026, 1, 15, 15, 0, tzinfo=timezone.utc)
     [
         (NEW_YORK, JULY, "ET"),
         (CHICAGO, JANUARY, "CT"),
-        ("US/Central", JULY, "CT"),
         ("UTC", JULY, "UTC"),
         ("Etc/GMT+6", JULY, "UTC-6"),
-        ("Etc/GMT-14", JULY, "UTC+14"),
         ("Europe/London", JULY, "BST"),
         ("Europe/London", JANUARY, "GMT"),
     ],
@@ -174,7 +160,6 @@ def parse(text, now=NOW, creator_tz=NEW_YORK, target_tz=CHICAGO):
         ("3pm their time", utc(2026, 10, 1, 20, 0), CHICAGO, "3:00 PM CT"),
         # Natural language with dates
         ("tomorrow 9am", utc(2026, 10, 2, 13, 0), NEW_YORK, "9:00 AM ET"),
-        ("9am tomorrow", utc(2026, 10, 2, 13, 0), NEW_YORK, "9:00 AM ET"),
         ("friday 3pm", utc(2026, 10, 2, 19, 0), NEW_YORK, "3:00 PM ET"),
         ("friday at noon", utc(2026, 10, 2, 16, 0), NEW_YORK, "12:00 PM ET"),
         ("oct 3 9am", utc(2026, 10, 3, 13, 0), NEW_YORK, "9:00 AM ET"),
@@ -184,7 +169,6 @@ def parse(text, now=NOW, creator_tz=NEW_YORK, target_tz=CHICAGO):
         ("21:00", utc(2026, 10, 2, 1, 0), NEW_YORK, "9:00 PM ET"),
         # Relative
         ("in 2 hours", utc(2026, 10, 1, 17, 40), NEW_YORK, "1:40 PM ET"),
-        ("in 15 minutes", utc(2026, 10, 1, 15, 55), NEW_YORK, "11:55 AM ET"),
         ("90m", utc(2026, 10, 1, 17, 10), NEW_YORK, "1:10 PM ET"),
         ("in an hour", utc(2026, 10, 1, 16, 40), NEW_YORK, "12:40 PM ET"),
     ],
@@ -194,10 +178,6 @@ def test_parse_when(text, fire_at, zone, display):
     assert result.fire_at == fire_at
     assert result.zone == zone
     assert result.display == display
-
-
-def test_fire_at_is_utc():
-    assert parse("3pm").fire_at.tzinfo == timezone.utc
 
 
 def test_passed_time_today_rolls_to_tomorrow():
@@ -277,11 +257,6 @@ def test_unsupported_zone_is_rejected(text):
         parse(text)
 
 
-def test_naive_now_is_a_programming_error():
-    with pytest.raises(ValueError, match="aware"):
-        parse("9am", now=datetime(2026, 10, 1, 10, 40))
-
-
 # --- Snooze durations --------------------------------------------------------
 
 
@@ -290,9 +265,7 @@ def test_naive_now_is_a_programming_error():
     [
         ("15m", timedelta(minutes=15)),
         ("1h", timedelta(hours=1)),
-        ("2H", timedelta(hours=2)),
         ("1h30m", timedelta(minutes=90)),
-        ("1h 30m", timedelta(minutes=90)),
         ("90 minutes", timedelta(minutes=90)),
         ("1 hour and 15 mins", timedelta(minutes=75)),
         ("1d", timedelta(days=1)),

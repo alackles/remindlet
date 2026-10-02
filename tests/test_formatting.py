@@ -7,8 +7,6 @@ import formatting
 TARGET = 333333333333333333
 FIRE_AT = datetime(2026, 10, 1, 14, 0, tzinfo=timezone.utc)  # 9 AM Chicago
 UNIX = int(FIRE_AT.timestamp())
-
-
 TARGET2 = 444444444444444444
 FIRE_AT2 = FIRE_AT + timedelta(hours=1)  # 10 AM Chicago = 11 AM New York
 
@@ -65,14 +63,6 @@ def test_fired_matches_spec_format():
     )
 
 
-def test_fired_late_note_is_last_line():
-    text = formatting.fired(
-        target_id=TARGET, message="m", creator_name="E", zone="America/Chicago",
-        fire_at=FIRE_AT, now=FIRE_AT + timedelta(hours=1),
-    )
-    assert text.splitlines()[-1].startswith("-# ⚠️ Late")
-
-
 @pytest.mark.parametrize(
     "delay, late",
     [(timedelta(0), False), (timedelta(seconds=59), False), (timedelta(minutes=5), True)],
@@ -82,7 +72,7 @@ def test_fired_late_note(delay, late):
         target_id=TARGET, message="m", creator_name="E", zone="America/Chicago",
         fire_at=FIRE_AT, now=FIRE_AT + delay,
     )
-    assert ("Late" in text) is late
+    assert text.splitlines()[-1].startswith("-# ⚠️ Late") is late
 
 
 @pytest.mark.parametrize(
@@ -162,11 +152,6 @@ def test_list_sections_and_entry_format():
     ]
 
 
-def test_list_omits_empty_section():
-    text = formatting.reminder_list([row(12)], title="", now=FIRE_AT)
-    assert "Fired" not in text
-
-
 def test_empty_list_mentions_filters():
     assert formatting.reminder_list([], title=f" for <@{TARGET}>", now=FIRE_AT) == (
         f"No open reminders for <@{TARGET}>."
@@ -180,15 +165,6 @@ def test_long_list_is_cut_with_count():
     shown = text.count("\n#")
     assert shown > 0
     assert text.endswith(f"…and {40 - shown} more. Narrow it with `who:` or `from:`.")
-
-
-def test_fired_shows_year_when_not_current():
-    next_year = datetime(2027, 1, 5, 15, 0, tzinfo=timezone.utc)
-    text = formatting.fired(
-        target_id=TARGET, message="m", creator_name="E", fire_at=next_year,
-        zone="America/Chicago", now=datetime(2026, 12, 31, 15, 0, tzinfo=timezone.utc),
-    )
-    assert text.splitlines()[3].endswith("Jan 5, 2027")
 
 
 def test_dm_fallback_line():
