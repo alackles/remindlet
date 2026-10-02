@@ -83,7 +83,7 @@ There is no opt-in or opt-out mechanism for being reminded. On a 3-person resear
 
 Reminders fire in the channel where they were created. The channel is the context — a reminder set in `#facct-paper` fires there, so the domain is obvious before reading the message.
 
-**Fallback:** If the bot loses access to the original channel (permissions revoked, channel deleted), the reminder is delivered as a DM to the target with a note about where it was originally set.
+**Fallback:** If the bot loses access to the original channel (permissions revoked, channel deleted), the reminder is delivered as a DM to the target, with its buttons and a final small-text line about where it was originally set: `-# Sent by DM: I can't post in #facct-paper (Research Server) anymore.` Notes from pressing its buttons try the original channel and fall back to the DM. If the DM also fails (the target blocks DMs from server members), the failure is logged.
 
 ### Fired reminder format
 
@@ -199,7 +199,7 @@ When a reminder fires, the message includes a row of Discord buttons:
 
 `[Snooze 15m]` `[Snooze 1h]` `[Done ✓]` `[Cancel]`
 
-- **Snooze 15m / 1h** — pushes the reminder back by that duration. Posts a snooze note in the channel and re-fires later. Buttons reappear on the re-fired message.
+- **Snooze 15m / 1h** — pushes the reminder back by that duration (from now). Posts a snooze note in the channel and re-fires later. Clears the buttons on this message; fresh ones come with the re-fired message.
 - **Done ✓** — marks the reminder as completed. Posts the done note (see Audit trail) in the channel. Clears the buttons.
 - **Cancel** — cancels the reminder. Posts the cancel note in the channel (no reason via button; use `/cancel <id> reason` for that). Clears the buttons.
 
@@ -213,7 +213,9 @@ The reminder ID (shown in `/list` output and in creation confirmations) is how s
 
 ### Button expiry
 
-Discord buttons are tied to the running bot process. If the bot restarts, buttons on previously sent messages become inert. This is a known Discord limitation. Slash commands remain functional regardless. The bot should handle stale button interactions gracefully — reply with "this reminder has already been handled" or "use `/snooze <id> <duration>` (or `/done <id>`) instead" rather than erroring silently.
+Buttons keep working across bot restarts: each button's ID encodes the reminder ID, the fire time of the firing it belongs to, and the action, so the bot can handle a click without remembering anything about the message.
+
+A button is **stale** when its reminder has changed since that message was sent. It has been done or cancelled, snoozed or rescheduled (so its fire time no longer matches), or deleted. Pressing a stale button changes nothing: the presser gets a private reply ("Reminder #12 was already completed by acacia", or "Reminder #12 has moved since this message; use `/snooze 12 <duration>` or `/done 12`"), and the stale buttons are removed from that message. Buttons left on a message after a slash command changed its reminder are cleaned up this way the first time someone presses one.
 
 ## Data Model
 
