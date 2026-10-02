@@ -38,7 +38,7 @@ Design choices the spec doesn't cover. Format: milestone — choice (convention 
 - M3 — `what` is capped at 500 characters so three confirmation lines fit in Discord's 2000-character message limit. (judgment call)
 - M3 — Duplicate targets are collapsed into one; bots can't be targets. (judgment call)
 - M3 — The confirmation's date is shown in the zone the time was given in, matching the time beside it. (judgment call)
-- M3 — At firing, the creator's name comes from an API lookup (no privileged members intent needed), falling back to a mention that doesn't ping. (judgment call)
+- M3 — At firing, the creator's name comes from an API lookup (no privileged members intent needed), falling back to a mention that doesn't ping. (judgment call) **Superseded before M6.**
 - M3 — `/remind` errors (missing timezone, unparseable time, bot targets) are ephemeral, like `/timezone set`. (convention)
 - M4 — All state changes go through one helper, `db._change()`, whose `UPDATE … WHERE status IN (open)` guard makes simultaneous changes safe: only the first wins. (convention) **Superseded before M6.**
 - M4 — Acting on a closed reminder raises `ReminderClosed`, carrying who closed it (from `reminder_log`) for the error message. (judgment call) **Superseded before M6.**
@@ -48,7 +48,7 @@ Design choices the spec doesn't cover. Format: milestone — choice (convention 
 - M4 — `/list` entries are two lines: `#id @target: time [your time] date`, then a small-text `TASK · FROM · channel` line. FROM is a mention, which renders as a name with no lookup (the list is ephemeral, so nothing pings). (judgment call)
 - M4 — `/list` shows as many entries as fit in one message (1900 characters), then "…and N more", rather than paginating. (judgment call)
 - M4 — The `id` option is text, not an integer, so autocomplete can search reminder text and names; `12` and `#12` are both accepted. (judgment call)
-- M4 — Autocomplete labels use only display names the bot has already seen (no API calls inside Discord's 3-second autocomplete window); an unseen target's name is left out of the label. (judgment call)
+- M4 — Autocomplete labels use only display names the bot has already seen (no API calls inside Discord's 3-second autocomplete window); an unseen target's name is left out of the label. (judgment call) **Superseded before M6.**
 - M4 — An audit note is the command's reply when run in the reminder's channel; otherwise it posts there directly and the person gets a private pointer; if that channel is unreachable, it posts where the command was run. (judgment call)
 - M4 — `/reschedule` requires the person rescheduling to have a timezone, since `when` is read in their zone. (judgment call)
 - M4 — A reminder ID from another server is reported as not found. (convention)
@@ -62,3 +62,4 @@ Design choices the spec doesn't cover. Format: milestone — choice (convention 
 - M5 — Smoke-starting the bot during development uses a scratch `DB_PATH`, after a startup check fired a real pending reminder. (convention)
 - Before 6 — Replaced the event-driven scheduler (wake-ups, sleep-until-next, 60 s cap, injectable clock) with a `discord.ext.tasks` loop that fires whatever is due every 15 s. Reminders can arrive up to 15 s late; startup recovery and send-then-mark are unchanged. (judgment call, correction)
 - Before 6 — State changes are four plain `db` functions (one guarded `UPDATE` plus a log entry each), with no exception classes. The cog checks "is it open?" once before changing anything (`_lookup` for slash commands, `button_problem` for buttons); the SQL status guard just turns a slip into a no-op. Safe because asyncio runs one handler at a time and nothing awaits between check and change. (judgment call, correction)
+- Before 6 — The privileged Server Members intent is on (Developer Portal toggle plus `intents.members = True`), so every member is cached at startup and names come from `guild.get_member()`. Replaces the seen-names cache, the API-fetch fallback, and the per-command hook; a member who has left shows as a non-pinging mention. (judgment call, correction)

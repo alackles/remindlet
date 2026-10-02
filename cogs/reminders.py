@@ -93,9 +93,6 @@ def button_problem(row: sqlite3.Row | None, fire_unix: int) -> str | None:
 class Reminders(commands.Cog):
     def __init__(self, bot: commands.Bot) -> None:
         self.bot = bot
-        # Display names seen so far. Without the privileged members intent
-        # there's no member cache, and autocomplete can't wait on API calls.
-        self._names: dict[int, str] = {}
 
     async def cog_load(self) -> None:
         self.bot.add_dynamic_items(ReminderButton)
@@ -118,30 +115,12 @@ class Reminders(commands.Cog):
         # Channels aren't known until the bot has connected.
         await self.bot.wait_until_ready()
 
-    async def interaction_check(self, interaction: discord.Interaction) -> bool:
-        # Runs before every command in this cog: remember who we've seen.
-        self._remember(interaction.user)
-        return True
-
-    def _remember(self, *members: discord.abc.User | None) -> None:
-        for m in members:
-            if m is not None:
-                self._names[m.id] = _name(m)
-
-    async def _member_name(self, guild_id: int | str, user_id: int | str) -> str:
-        """Display name, from what we've seen or the API; a non-pinging mention
-        as a last resort (every send here restricts who can be pinged)."""
-        user_id = int(user_id)
-        if user_id in self._names:
-            return self._names[user_id]
+    def _member_name(self, guild_id: int | str, user_id: int | str) -> str:
+        """Display name from the member cache (filled at startup thanks to the
+        members intent); a non-pinging mention if they've left the server."""
         guild = self.bot.get_guild(int(guild_id))
-        if guild is not None:
-            try:
-                self._remember(guild.get_member(user_id) or await guild.fetch_member(user_id))
-                return self._names[user_id]
-            except discord.HTTPException:
-                pass
-        return formatting.mention(user_id)
+        member = guild.get_member(int(user_id)) if guild else None
+        return _name(member) if member else formatting.mention(user_id)
 
     # --- /remind -----------------------------------------------------------------
 
@@ -163,7 +142,6 @@ class Reminders(commands.Cog):
         also2: discord.Member | None = None,
     ) -> None:
         conn = self.bot.db
-        self._remember(who, also, also2)
         targets = list({m.id: m for m in (who, also, also2) if m is not None}.values())
 
         if bots := [t for t in targets if t.bot]:
@@ -229,19 +207,19 @@ class Reminders(commands.Cog):
         if row is None or row["guild_id"] != str(interaction.guild_id):
             text = f"There's no reminder `{id_text}`. `/list` shows open ones."
         elif row["status"] not in db.OPEN:
-            text = await self._closed_text(row)
+            text = self._closed_text(row)
         else:
             return row
         await interaction.response.send_message(text, ephemeral=True)
         return None
 
-    async def _closed_text(self, row: sqlite3.Row) -> str:
+    def _closed_text(self, row: sqlite3.Row) -> str:
         text = f"Reminder #{row['id']} was already {CLOSED_VERBS[row['status']]}"
         if closer_id := db.closed_by(self.bot.db, row["id"]):
-            text += f" by {await self._member_name(row['guild_id'], closer_id)}"
+            text += f" by {self._member_name(row['guild_id'], closer_id)}"
         return text + "."
 
-    async def _note(
+    def _note(
         self,
         row: sqlite3.Row,
         header: str,
@@ -256,7 +234,7 @@ class Reminders(commands.Cog):
         siblings = []
         if show_siblings:
             for sib in db.open_siblings(self.bot.db, row):
-                siblings.append((await self._member_name(sib["guild_id"], sib["target_id"]), sib["id"]))
+                siblings.append((self._member_name(sib["guild_id"], sib["target_id"]), sib["id"]))
         note = formatting.audit_note(
             header=header,
             target_id=row["target_id"],
@@ -277,7 +255,7 @@ class Reminders(commands.Cog):
         self, interaction: discord.Interaction, row: sqlite3.Row, header: str, **note_options
     ) -> None:
         """Announce a slash-command change (already made) in the reminder's channel."""
-        note, mentions = await self._note(row, header, interaction.user.id, **note_options)
+        note, mentions = self._note(row, header, interaction.user.id, **note_options)
         await self._announce(interaction, int(row["channel_id"]), note, mentions)
 
     async def _send_to_channel(
@@ -311,7 +289,6 @@ class Reminders(commands.Cog):
         self, interaction: discord.Interaction, rid: int, fire_unix: int, action: str
     ) -> None:
         """Handle a click on a fired reminder's button (see ReminderButton)."""
-        self._remember(interaction.user)
         conn = self.bot.db
         row = db.get_reminder(conn, rid)
         if (problem := button_problem(row, fire_unix)) is not None:
@@ -337,7 +314,7 @@ class Reminders(commands.Cog):
             options = {"show_siblings": True}
 
         await interaction.response.edit_message(view=None)
-        note, mentions = await self._note(row, header, uid, **options)
+        note, mentions = self._note(row, header, uid, **options)
         if not await self._send_to_channel(int(row["channel_id"]), note, mentions):
             # Delivered by DM fallback, or the channel vanished since: note goes here.
             await interaction.followup.send(note, allowed_mentions=mentions)
@@ -348,7 +325,7 @@ class Reminders(commands.Cog):
         if problem == "missing":
             text = f"Reminder #{rid} no longer exists."
         elif problem == "closed":
-            text = await self._closed_text(row)
+            text = self._closed_text(row)
         else:
             text = (
                 f"Reminder #{rid} has moved since this message. "
@@ -476,7 +453,8 @@ class Reminders(commands.Cog):
         now = datetime.now(timezone.utc)
         choices = []
         for row in db.list_open(self.bot.db, interaction.guild_id):
-            name = self._names.get(int(row["target_id"]), "")
+            target = interaction.guild.get_member(int(row["target_id"]))
+            name = _name(target) if target else ""
             if query and not (
                 str(row["id"]).startswith(query)
                 or query in row["message"].lower()
@@ -508,7 +486,6 @@ class Reminders(commands.Cog):
         who: discord.Member | None = None,
         from_: discord.Member | None = None,
     ) -> None:
-        self._remember(who, from_)
         rows = db.list_open(
             self.bot.db,
             interaction.guild_id,
@@ -529,7 +506,7 @@ class Reminders(commands.Cog):
         text = formatting.fired(
             target_id=target.id,
             message=row["message"],
-            creator_name=await self._member_name(row["guild_id"], row["creator_id"]),
+            creator_name=self._member_name(row["guild_id"], row["creator_id"]),
             fire_at=fire_at,
             zone=row["original_tz"],
             now=datetime.now(timezone.utc),

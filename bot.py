@@ -20,11 +20,15 @@ async def ping(interaction: discord.Interaction) -> None:
 
 class ReminderBot(commands.Bot):
     def __init__(self, guild_id: int) -> None:
-        # Slash commands need no privileged intents. The prefix is a placeholder:
-        # commands.Bot requires one, but we only use app commands.
+        # The members intent (privileged: also enabled in the Developer Portal)
+        # keeps every server member cached, so names never need an API call.
+        intents = discord.Intents.default()
+        intents.members = True
+        # The prefix is a placeholder: commands.Bot requires one, but we only
+        # use app commands.
         super().__init__(
             command_prefix=commands.when_mentioned,
-            intents=discord.Intents.default(),
+            intents=intents,
             # Never ping @everyone/@here or roles, even if reminder text has them.
             allowed_mentions=discord.AllowedMentions(everyone=False, roles=False, users=True),
         )
