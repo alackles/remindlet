@@ -158,7 +158,7 @@ For multi-target reminders, TASK and FROM appear once and each reminder gets its
 #13 @elliott: 10:00 AM ET [your time: 9:00 AM] Oct 1
 ```
 
-The confirmation pings the targets, so they know something was set for them. The date shows the year only when it isn't the current year.
+The confirmation pings the targets, so they know something was set for them. Both pings are essential, not redundant: the creation ping says "someone needs this from you later" and the fired ping says "it's time now". The bot exists so a reminder can be set the moment the thought occurs, and nothing in between (memory included) can be relied on to carry it. The date shows the year only when it isn't the current year.
 
 If the creator or any target has no stored timezone, nothing is created; the error names everyone who needs to run `/timezone set`.
 
@@ -318,5 +318,7 @@ Deferred from v1 but the data model and architecture should not close them off.
 **Reminder categories or tags.** Could add a `tags` column for organizing reminders by topic (`#facct`, `#irb`, `#grading`). Would let `/list` filter by tag. Low effort, unclear if needed at current server size.
 
 **Thread-based reminders.** Fire the reminder as a reply in a specific thread rather than the top-level channel. Useful if the server develops more structured channel usage.
+
+**Still-open nudge.** A fired reminder nobody has marked done or cancelled gets one follow-up ping the next morning ("this is still waiting"), so tasks don't fade once their moment passes.
 
 **Escalation.** If a reminder is snoozed more than N times, optionally notify the creator. Passive accountability without being punitive. Questionable whether this is wanted.
