@@ -53,13 +53,13 @@ every change is announced in the channel where the reminder lives.
 - [x] 3. Create and fire: `/remind` (single and multi-target with batch_id),
       confirmation message, scheduler, firing in channel, startup recovery.
       Done when: a reminder created before a restart still fires after it.
-- [x] Before 4: Clean up how reminders read in Discord. Designed together;
+- [x] 3.5. Formatting: clean up how reminders read in Discord. Designed together;
       TASK/FROM/AT labeled lines for all bot messages (see SPEC.md).
 - [x] 4. Management: `/list` with filters, `/reschedule`, `/cancel`,
       `/snooze`, audit posts, sibling notes.
 - [x] 5. Buttons: Snooze 15m / 1h / Done / Cancel, stale-button handling,
       DM fallback when the channel is gone.
-- [ ] Before 6: Simplify. This is a small personal bot; cut code, tests, and
+- [ ] 5.5. Simplify: this is a small personal bot; cut code, tests, and
       safeguards that cost more than they protect, without losing functionality
       or good practice. Propose a few items at a time, highest priority first.
 - [ ] 6. Deploy: systemd service on the VPS, `.env`, logging.

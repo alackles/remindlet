@@ -28,27 +28,27 @@ Design choices the spec doesn't cover. Format: milestone — choice (convention 
 - M2 — Whether a past time-only input omitted its date is detected by re-parsing with "now" moved a day later and checking whether the result moves with it. (judgment call)
 - M2 — dateparser restricted to English (`languages=["en"]`): faster, and avoids matching words in other languages. (convention)
 - M2 — Tests name fake users by role (`USER`, `CREATOR`, `TARGET`) with snowflake-sized IDs, not real server members; parser tests describe the spec's scenario in a comment instead. (convention, correction)
-- M3 — Scheduler is one asyncio task that treats the database as the schedule (sleep until the soonest active reminder, fire what's due, repeat), not APScheduler; `wake()` interrupts the sleep when reminders change. (judgment call) **Superseded before M6.**
+- M3 — Scheduler is one asyncio task that treats the database as the schedule (sleep until the soonest active reminder, fire what's due, repeat), not APScheduler; `wake()` interrupts the sleep when reminders change. (judgment call) **Superseded in M5.5.**
 - M3 — Send, then mark fired: a crash between the two re-fires on restart (duplicate) rather than losing the reminder. (judgment call)
 - M3 — A failed send is logged and still marked fired so it isn't retried forever; Milestone 5's DM fallback goes in the fire callback. (judgment call)
-- M3 — The scheduler re-checks the database at least every 60 s, so a system clock adjustment can't strand a reminder. (convention) **Superseded before M6.**
-- M3 — The scheduler takes its fire callback and clock as arguments, so tests run with a fake clock and no Discord. (convention) **Superseded before M6.**
+- M3 — The scheduler re-checks the database at least every 60 s, so a system clock adjustment can't strand a reminder. (convention) **Superseded in M5.5.**
+- M3 — The scheduler takes its fire callback and clock as arguments, so tests run with a fake clock and no Discord. (convention) **Superseded in M5.5.**
 - M3 — Message text lives in a new `formatting.py` (no Discord imports), so formats are tested against the spec's examples. (judgment call)
 - M3 — A reminder fired more than 1 minute after its time gets the late note. (judgment call)
 - M3 — `what` is capped at 500 characters so three confirmation lines fit in Discord's 2000-character message limit. (judgment call)
 - M3 — Duplicate targets are collapsed into one; bots can't be targets. (judgment call)
 - M3 — The confirmation's date is shown in the zone the time was given in, matching the time beside it. (judgment call)
-- M3 — At firing, the creator's name comes from an API lookup (no privileged members intent needed), falling back to a mention that doesn't ping. (judgment call) **Superseded before M6.**
+- M3 — At firing, the creator's name comes from an API lookup (no privileged members intent needed), falling back to a mention that doesn't ping. (judgment call) **Superseded in M5.5.**
 - M3 — `/remind` errors (missing timezone, unparseable time, bot targets) are ephemeral, like `/timezone set`. (convention)
-- M4 — All state changes go through one helper, `db._change()`, whose `UPDATE … WHERE status IN (open)` guard makes simultaneous changes safe: only the first wins. (convention) **Superseded before M6.**
-- M4 — Acting on a closed reminder raises `ReminderClosed`, carrying who closed it (from `reminder_log`) for the error message. (judgment call) **Superseded before M6.**
+- M4 — All state changes go through one helper, `db._change()`, whose `UPDATE … WHERE status IN (open)` guard makes simultaneous changes safe: only the first wins. (convention) **Superseded in M5.5.**
+- M4 — Acting on a closed reminder raises `ReminderClosed`, carrying who closed it (from `reminder_log`) for the error message. (judgment call) **Superseded in M5.5.**
 - M4 — Snooze leaves `original_time_str` as entered; the new time is displayed by formatting `fire_at` in `original_tz`. (judgment call)
 - M4 — Snooze durations parsed by our own regex (days/hours/minutes, combinable), not dateparser; capped at 30 days, beyond which `/reschedule` is the right tool. (judgment call)
 - M4 — Displayed times are always computed from `fire_at` in `original_tz`, never read from `original_time_str`, so snoozed reminders show their new time. (convention)
 - M4 — `/list` entries are two lines: `#id @target: time [your time] date`, then a small-text `TASK · FROM · channel` line. FROM is a mention, which renders as a name with no lookup (the list is ephemeral, so nothing pings). (judgment call)
 - M4 — `/list` shows as many entries as fit in one message (1900 characters), then "…and N more", rather than paginating. (judgment call)
 - M4 — The `id` option is text, not an integer, so autocomplete can search reminder text and names; `12` and `#12` are both accepted. (judgment call)
-- M4 — Autocomplete labels use only display names the bot has already seen (no API calls inside Discord's 3-second autocomplete window); an unseen target's name is left out of the label. (judgment call) **Superseded before M6.**
+- M4 — Autocomplete labels use only display names the bot has already seen (no API calls inside Discord's 3-second autocomplete window); an unseen target's name is left out of the label. (judgment call) **Superseded in M5.5.**
 - M4 — An audit note is the command's reply when run in the reminder's channel; otherwise it posts there directly and the person gets a private pointer; if that channel is unreachable, it posts where the command was run. (judgment call)
 - M4 — `/reschedule` requires the person rescheduling to have a timezone, since `when` is read in their zone. (judgment call)
 - M4 — A reminder ID from another server is reported as not found. (convention)
@@ -60,6 +60,6 @@ Design choices the spec doesn't cover. Format: milestone — choice (convention 
 - M5 — DM fallback triggers only when the channel is gone or off-limits (`NotFound`/`Forbidden`); other errors are logged and the reminder is marked fired, as in M3. (judgment call)
 - M5 — The Cancel button's note includes `ALSO:` sibling lines like `/cancel`; snooze and done notes don't, per the spec's light-linking rule. (convention)
 - M5 — Smoke-starting the bot during development uses a scratch `DB_PATH`, after a startup check fired a real pending reminder. (convention)
-- Before 6 — Replaced the event-driven scheduler (wake-ups, sleep-until-next, 60 s cap, injectable clock) with a `discord.ext.tasks` loop that fires whatever is due every 15 s. Reminders can arrive up to 15 s late; startup recovery and send-then-mark are unchanged. (judgment call, correction)
-- Before 6 — State changes are four plain `db` functions (one guarded `UPDATE` plus a log entry each), with no exception classes. The cog checks "is it open?" once before changing anything (`_lookup` for slash commands, `button_problem` for buttons); the SQL status guard just turns a slip into a no-op. Safe because asyncio runs one handler at a time and nothing awaits between check and change. (judgment call, correction)
-- Before 6 — The privileged Server Members intent is on (Developer Portal toggle plus `intents.members = True`), so every member is cached at startup and names come from `guild.get_member()`. Replaces the seen-names cache, the API-fetch fallback, and the per-command hook; a member who has left shows as a non-pinging mention. (judgment call, correction)
+- M5.5 — Replaced the event-driven scheduler (wake-ups, sleep-until-next, 60 s cap, injectable clock) with a `discord.ext.tasks` loop that fires whatever is due every 15 s. Reminders can arrive up to 15 s late; startup recovery and send-then-mark are unchanged. (judgment call, correction)
+- M5.5 — State changes are four plain `db` functions (one guarded `UPDATE` plus a log entry each), with no exception classes. The cog checks "is it open?" once before changing anything (`_lookup` for slash commands, `button_problem` for buttons); the SQL status guard just turns a slip into a no-op. Safe because asyncio runs one handler at a time and nothing awaits between check and change. (judgment call, correction)
+- M5.5 — The privileged Server Members intent is on (Developer Portal toggle plus `intents.members = True`), so every member is cached at startup and names come from `guild.get_member()`. Replaces the seen-names cache, the API-fetch fallback, and the per-command hook; a member who has left shows as a non-pinging mention. (judgment call, correction)
