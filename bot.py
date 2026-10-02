@@ -3,19 +3,12 @@
 import logging
 
 import discord
-from discord import app_commands
 from discord.ext import commands
 
 import config
 import db
 
 log = logging.getLogger("remindlet")
-
-
-@app_commands.command(description="Check that the bot is alive.")
-async def ping(interaction: discord.Interaction) -> None:
-    latency_ms = round(interaction.client.latency * 1000)
-    await interaction.response.send_message(f"Pong! ({latency_ms} ms)")
 
 
 class ReminderBot(commands.Bot):
@@ -40,7 +33,6 @@ class ReminderBot(commands.Bot):
         log.info("Opened database %s", config.DB_PATH)
         await self.load_extension("cogs.timezone")
         await self.load_extension("cogs.reminders")
-        self.tree.add_command(ping)
         self.tree.copy_global_to(guild=self.guild)
         synced = await self.tree.sync(guild=self.guild)
         log.info("Synced %d command(s) to guild %s", len(synced), self.guild.id)

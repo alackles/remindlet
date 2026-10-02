@@ -6,7 +6,7 @@ Design choices the spec doesn't cover. Format: milestone — choice (convention 
 
 - M0 — Dependencies in `requirements.txt` with minimum versions (`>=`), not exact pins; local env is `.venv/`. (convention)
 - M0 — Sync slash commands to the single guild (`GUILD_ID`) on every startup in `setup_hook`, rather than global sync or a manual sync command. (judgment call)
-- M0 — `/ping` lives in `bot.py` as a temporary health check, not in a cog. (judgment call)
+- M0 — `/ping` lives in `bot.py` as a temporary health check, not in a cog. (judgment call) **Superseded in M5.5.**
 - M1 — Stdlib `sqlite3` called synchronously from the event loop, not `aiosqlite`; queries are sub-millisecond at this scale. (judgment call)
 - M1 — Schema version stored in `PRAGMA user_version`; `db.connect()` creates the schema on a fresh file and refuses to open a mismatched version. (convention)
 - M1 — `CHECK` constraints on `reminders.status` and `reminder_log.action`; index on `reminders (status, fire_at)` for the scheduler. (convention)
@@ -64,3 +64,4 @@ Design choices the spec doesn't cover. Format: milestone — choice (convention 
 - M5.5 — State changes are four plain `db` functions (one guarded `UPDATE` plus a log entry each), with no exception classes. The cog checks "is it open?" once before changing anything (`_lookup` for slash commands, `button_problem` for buttons); the SQL status guard just turns a slip into a no-op. Safe because asyncio runs one handler at a time and nothing awaits between check and change. (judgment call, correction)
 - M5.5 — The privileged Server Members intent is on (Developer Portal toggle plus `intents.members = True`), so every member is cached at startup and names come from `guild.get_member()`. Replaces the seen-names cache, the API-fetch fallback, and the per-command hook; a member who has left shows as a non-pinging mention. (judgment call, correction)
 - M5.5 — Tests keep behavior a user would notice (parser phrases and rejections, exact message formats, state rules, button staleness) and drop tests of internals, library behavior, and cases a neighboring test already covers. Shared setup lives in `tests/conftest.py` (the `conn` fixture) and `tests/helpers.py` (fake users, `T0`, `add()`). (convention, correction)
+- M5.5 — Removed the temporary `/ping`; guild sync drops it from Discord on the next start. (convention, correction)
