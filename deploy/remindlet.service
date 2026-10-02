@@ -1,0 +1,19 @@
+# systemd unit for remindlet. __USER__ and __DIR__ are filled in at install
+# time (see README.md): the account that owns the clone, and the clone's path.
+
+[Unit]
+Description=remindlet Discord reminder bot
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=__USER__
+WorkingDirectory=__DIR__
+ExecStart=__DIR__/.venv/bin/python bot.py
+Restart=on-failure
+RestartSec=10
+# Write log lines immediately, so journalctl shows them as they happen.
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=multi-user.target

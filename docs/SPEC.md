@@ -269,12 +269,12 @@ The log table provides a full history of each reminder. This is useful for debug
 - **Python 3.11+** with discord.py (slash commands, buttons, interactions)
 - **SQLite** for persistence (single file, no external database service)
 - **dateparser** for natural language time parsing
-- **APScheduler** or asyncio-based scheduler for firing reminders at the right time
-- **pytz** or **zoneinfo** (stdlib in 3.9+) for timezone handling
+- **discord.ext.tasks** loop polling the database every 15 seconds to fire due reminders
+- **zoneinfo** (stdlib) for timezone handling
 
 ### VPS setup
 
-Run as a systemd service for automatic restart on crash or reboot. The bot token goes in an environment variable or a `.env` file outside the repo.
+Run as a systemd service for automatic restart on crash or reboot, using the unit template in `deploy/remindlet.service` (steps in `docs/SETUP.md`). The bot token goes in a `.env` file in the clone's directory, which is gitignored and readable only by its owner. Logs go to the systemd journal (`journalctl -u remindlet`). Only one copy of the bot may run per token.
 
 ### Startup recovery
 
@@ -284,22 +284,28 @@ Reminders that came due while the bot was offline fire immediately on startup, w
 
 ### Discord bot setup
 
-Requires a Discord application with a bot user. Permissions needed: Send Messages, Embed Links, Use Slash Commands, Read Message History. The bot should be added to the server with an OAuth2 URL scoped to the specific server.
+Requires a Discord application with a bot user and the privileged **Server Members** intent enabled (for display names). Invite scopes: `bot` and `applications.commands`. Permissions needed: Send Messages, Embed Links, Read Message History. The bot should be added to the server with an OAuth2 URL scoped to the specific server.
 
 ### Repo structure
 
-Single-repo project. Suggested layout:
+Single-repo project:
 
 ```
-reminder-bot/
-├── bot.py              # Entry point, bot setup, event loop
+remindlet/
+├── bot.py              # Entry point, bot setup, command sync
 ├── cogs/
 │   ├── reminders.py    # /remind, /reschedule, /cancel, /snooze, /done, /list, buttons, firing
 │   └── timezone.py     # /timezone set
-├── db.py               # SQLite connection, queries, schema
-├── time_parser.py      # NLP time parsing, qualifier detection
-├── config.py           # Bot token, DB path, constants
+├── db.py               # SQLite connection, schema and migrations, queries
+├── time_parser.py      # Reading input: times, zones, qualifiers, durations
+├── formatting.py       # Writing output: every message the bot posts
+├── config.py           # Token, guild ID, DB path from .env
+├── deploy/
+│   └── remindlet.service  # systemd unit template
+├── docs/               # SPEC.md, DECISIONS.md, SETUP.md, UNTESTED.md
+├── tests/
 ├── requirements.txt
+├── requirements-dev.txt
 └── README.md
 ```
 
