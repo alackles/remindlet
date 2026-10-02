@@ -294,10 +294,9 @@ Single-repo project. Suggested layout:
 reminder-bot/
 ├── bot.py              # Entry point, bot setup, event loop
 ├── cogs/
-│   ├── reminders.py    # /remind, /reschedule, /cancel, /snooze, /list
+│   ├── reminders.py    # /remind, /reschedule, /cancel, /snooze, /done, /list, buttons, firing
 │   └── timezone.py     # /timezone set
 ├── db.py               # SQLite connection, queries, schema
-├── scheduler.py        # Reminder scheduling and firing logic
 ├── time_parser.py      # NLP time parsing, qualifier detection
 ├── config.py           # Bot token, DB path, constants
 ├── requirements.txt

@@ -2,7 +2,7 @@ import asyncio
 from datetime import timedelta
 
 import db
-from scheduler import fire_due
+from cogs.reminders import fire_due
 from tests.helpers import T0, add
 
 

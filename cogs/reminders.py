@@ -3,6 +3,7 @@ reminders, and firing reminders when they come due."""
 
 import logging
 import sqlite3
+from collections.abc import Awaitable, Callable
 from datetime import datetime, timedelta, timezone
 
 import discord
@@ -12,7 +13,6 @@ from discord.ext import commands, tasks
 import db
 import formatting
 import time_parser
-import scheduler
 
 log = logging.getLogger(__name__)
 
@@ -27,6 +27,31 @@ def _name(member: discord.abc.User) -> str:
 def _parse_id(text: str) -> int | None:
     text = text.strip().lstrip("#")
     return int(text) if text.isdigit() else None
+
+
+# --- Firing --------------------------------------------------------------------
+
+# Reminders.poll() checks this often, so reminders arrive up to this many
+# seconds after their time.
+POLL_SECONDS = 15
+
+
+async def fire_due(
+    conn: sqlite3.Connection,
+    fire: Callable[[sqlite3.Row], Awaitable[None]],
+    now: datetime,
+) -> None:
+    """Send every reminder that's due. The database is the schedule, so
+    startup recovery needs no special case: the first pass after a restart
+    fires whatever came due while the bot was down."""
+    for row in db.due_reminders(conn, now):
+        # Send first, then mark: a crash in between re-fires on restart
+        # (a duplicate) rather than losing the reminder.
+        try:
+            await fire(row)
+        except Exception:
+            log.exception("Failed to fire reminder #%s", row["id"])
+        db.mark_fired(conn, row["id"])
 
 
 # --- Buttons on fired reminders ----------------------------------------------------
@@ -102,10 +127,10 @@ class Reminders(commands.Cog):
         self.bot.remove_dynamic_items(ReminderButton)
         self.poll.cancel()
 
-    @tasks.loop(seconds=scheduler.POLL_SECONDS)
+    @tasks.loop(seconds=POLL_SECONDS)
     async def poll(self) -> None:
         try:
-            await scheduler.fire_due(self.bot.db, self.fire, datetime.now(timezone.utc))
+            await fire_due(self.bot.db, self.fire, datetime.now(timezone.utc))
         except Exception:
             # An uncaught error would stop the loop for good; log and keep polling.
             log.exception("Polling for due reminders failed")
@@ -500,7 +525,7 @@ class Reminders(commands.Cog):
 
     async def fire(self, row: sqlite3.Row) -> None:
         """Post a due reminder in its channel, or DM the target if the channel
-        is gone or off-limits. Called by poll() via scheduler.fire_due()."""
+        is gone or off-limits. Called by poll() via fire_due()."""
         target = discord.Object(int(row["target_id"]))
         fire_at = db.from_iso(row["fire_at"])
         text = formatting.fired(
