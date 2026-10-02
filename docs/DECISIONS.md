@@ -52,3 +52,4 @@ Design choices the spec doesn't cover. Format: milestone — choice (convention 
 - M4 — An audit note is the command's reply when run in the reminder's channel; otherwise it posts there directly and the person gets a private pointer; if that channel is unreachable, it posts where the command was run. (judgment call)
 - M4 — `/reschedule` requires the person rescheduling to have a timezone, since `when` is read in their zone. (judgment call)
 - M4 — A reminder ID from another server is reported as not found. (convention)
+- M4 — Every AT line (fired reminders, reschedule and snooze notes) includes the date, in the same `time [your time] date` order as confirmations and `/list`; one helper, `formatting.when()`, renders all of them. (convention, correction)

@@ -91,7 +91,7 @@ Reminders fire in the channel where they were created. The channel is the contex
 ⏰ @acacia
 TASK: submit IRB revision
 FROM: Elliott
-AT: 10:00 AM ET [your time: 9:00 AM]
+AT: 10:00 AM ET [your time: 9:00 AM] Oct 1
 ```
 
 FROM is always shown, even when someone reminds themselves. A reminder delivered late (see Startup recovery) gets a final small-text line: `-# ⚠️ Late: the bot was offline when this was due.`
@@ -108,7 +108,7 @@ All state changes post a visible note in the originating channel, in the same la
 🔄 acacia rescheduled reminder #12
 FOR: @elliott
 TASK: submit IRB revision
-AT: 10:00 AM CT [your time: 10:00 AM]
+AT: 10:00 AM CT [your time: 10:00 AM] Oct 1
 REASON: sick
 ```
 
@@ -118,7 +118,7 @@ REASON: sick
 💤 acacia snoozed reminder #12 for 1h
 FOR: @elliott
 TASK: submit IRB revision
-AT: 10:00 AM CT [your time: 10:00 AM]
+AT: 10:00 AM CT [your time: 10:00 AM] Oct 1
 ```
 
 **Cancel:**
@@ -180,7 +180,7 @@ When a reminder with siblings is cancelled or rescheduled, the channel notificat
 🔄 acacia rescheduled reminder #14
 FOR: @acacia
 TASK: do the thing
-AT: 10:00 AM CT [your time: 10:00 AM]
+AT: 10:00 AM CT [your time: 10:00 AM] Oct 1
 REASON: need more time
 ALSO: elliott's copy #15 is still active
 ```

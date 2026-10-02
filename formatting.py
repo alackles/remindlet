@@ -37,12 +37,16 @@ def short_date(dt: datetime, zone: str, now: datetime) -> str:
     return text
 
 
+def when(fire_at: datetime, zone: str, now: datetime) -> str:
+    """The one way a reminder's time is shown: "9:00 AM CT [your time: …] Oct 1"."""
+    return f"{format_in_zone(fire_at, zone)} {your_time(fire_at)} {short_date(fire_at, zone, now)}"
+
+
 class Created(NamedTuple):
     """One target's line in a creation confirmation."""
 
     reminder_id: int
     target_id: int
-    display: str
     fire_at: datetime
     zone: str
 
@@ -59,8 +63,7 @@ def confirmation(
     per target with `their time`)."""
     lines = [f"Created in <#{channel_id}>", f"TASK: {message}", f"FROM: {creator_name}"]
     lines += [
-        f"#{c.reminder_id} {mention(c.target_id)}: {c.display} {your_time(c.fire_at)} "
-        f"{short_date(c.fire_at, c.zone, now)}"
+        f"#{c.reminder_id} {mention(c.target_id)}: {when(c.fire_at, c.zone, now)}"
         for c in created
     ]
     return "\n".join(lines)
@@ -71,15 +74,15 @@ def fired(
     target_id: int | str,
     message: str,
     creator_name: str,
-    display: str,
     fire_at: datetime,
+    zone: str,
     now: datetime,
 ) -> str:
     lines = [
         f"⏰ {mention(target_id)}",
         f"TASK: {message}",
         f"FROM: {creator_name}",
-        f"AT: {display} {your_time(fire_at)}",
+        f"AT: {when(fire_at, zone, now)}",
     ]
     if now - fire_at > LATE_AFTER:
         # "-#" is Discord's small-text markdown.
@@ -94,14 +97,16 @@ def audit_note(
     message: str,
     fire_at: datetime | None = None,
     zone: str | None = None,
+    now: datetime | None = None,
     reason: str | None = None,
     siblings: Sequence[tuple[str, int]] = (),
 ) -> str:
-    """A reschedule/snooze/cancel/done note. AT appears when fire_at is given;
+    """A reschedule/snooze/cancel/done note. AT appears when fire_at is given
+    (with zone and now);
     siblings are (target name, reminder id) pairs for the ALSO lines."""
     lines = [header, f"FOR: {mention(target_id)}", f"TASK: {message}"]
     if fire_at is not None:
-        lines.append(f"AT: {format_in_zone(fire_at, zone)} {your_time(fire_at)}")
+        lines.append(f"AT: {when(fire_at, zone, now)}")
     if reason:
         lines.append(f"REASON: {reason}")
     lines += [f"ALSO: {name}'s copy #{rid} is still active" for name, rid in siblings]
@@ -111,11 +116,11 @@ def audit_note(
 def _list_entry(row: Mapping[str, Any], now: datetime) -> str:
     fire_at = datetime.fromisoformat(row["fire_at"])
     zone = row["original_tz"]
-    when = f"{format_in_zone(fire_at, zone)} {your_time(fire_at)} {short_date(fire_at, zone, now)}"
+    shown = when(fire_at, zone, now)
     if row["status"] == "fired":
-        when = f"was due {when}"
+        shown = f"was due {shown}"
     return (
-        f"#{row['id']} {mention(row['target_id'])}: {when}\n"
+        f"#{row['id']} {mention(row['target_id'])}: {shown}\n"
         f"-# TASK: {row['message']} · FROM: {mention(row['creator_id'])} · in <#{row['channel_id']}>"
     )
 

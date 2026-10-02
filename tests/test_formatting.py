@@ -18,7 +18,7 @@ def test_confirmation_single_target():
         message="submit IRB revision",
         creator_name="Elliott",
         channel_id=42,
-        created=[formatting.Created(12, TARGET, "9:00 AM CT", FIRE_AT, "America/Chicago")],
+        created=[formatting.Created(12, TARGET, FIRE_AT, "America/Chicago")],
         now=FIRE_AT - timedelta(hours=2),
     )
     assert text == (
@@ -35,8 +35,8 @@ def test_confirmation_multi_target_has_one_line_each():
         creator_name="Elliott",
         channel_id=42,
         created=[
-            formatting.Created(12, TARGET, "9:00 AM CT", FIRE_AT, "America/Chicago"),
-            formatting.Created(13, TARGET2, "11:00 AM ET", FIRE_AT2, "America/New_York"),
+            formatting.Created(12, TARGET, FIRE_AT, "America/Chicago"),
+            formatting.Created(13, TARGET2, FIRE_AT2, "America/New_York"),
         ],
         now=FIRE_AT - timedelta(hours=2),
     )
@@ -53,21 +53,21 @@ def test_fired_matches_spec_format():
         target_id=TARGET,
         message="submit IRB revision",
         creator_name="Elliott",
-        display="10:00 AM ET",
         fire_at=FIRE_AT,
+        zone="America/New_York",
         now=FIRE_AT + timedelta(seconds=2),
     )
     assert text == (
         f"⏰ <@{TARGET}>\n"
         "TASK: submit IRB revision\n"
         "FROM: Elliott\n"
-        f"AT: 10:00 AM ET [your time: <t:{UNIX}:t>]"
+        f"AT: 10:00 AM ET [your time: <t:{UNIX}:t>] Oct 1"
     )
 
 
 def test_fired_late_note_is_last_line():
     text = formatting.fired(
-        target_id=TARGET, message="m", creator_name="E", display="x",
+        target_id=TARGET, message="m", creator_name="E", zone="America/Chicago",
         fire_at=FIRE_AT, now=FIRE_AT + timedelta(hours=1),
     )
     assert text.splitlines()[-1].startswith("-# ⚠️ Late")
@@ -79,7 +79,7 @@ def test_fired_late_note_is_last_line():
 )
 def test_fired_late_note(delay, late):
     text = formatting.fired(
-        target_id=TARGET, message="m", creator_name="E", display="x",
+        target_id=TARGET, message="m", creator_name="E", zone="America/Chicago",
         fire_at=FIRE_AT, now=FIRE_AT + delay,
     )
     assert ("Late" in text) is late
@@ -108,6 +108,7 @@ def test_reschedule_note_matches_spec():
         message="do the thing",
         fire_at=FIRE_AT,
         zone="America/Chicago",
+        now=FIRE_AT - timedelta(hours=2),
         reason="need more time",
         siblings=[("elliott", 15)],
     )
@@ -115,7 +116,7 @@ def test_reschedule_note_matches_spec():
         "🔄 acacia rescheduled reminder #14",
         f"FOR: <@{TARGET}>",
         "TASK: do the thing",
-        f"AT: 9:00 AM CT [your time: <t:{UNIX}:t>]",
+        f"AT: 9:00 AM CT [your time: <t:{UNIX}:t>] Oct 1",
         "REASON: need more time",
         "ALSO: elliott's copy #15 is still active",
     ]
@@ -179,3 +180,12 @@ def test_long_list_is_cut_with_count():
     shown = text.count("\n#")
     assert shown > 0
     assert text.endswith(f"…and {40 - shown} more. Narrow it with `who:` or `from:`.")
+
+
+def test_fired_shows_year_when_not_current():
+    next_year = datetime(2027, 1, 5, 15, 0, tzinfo=timezone.utc)
+    text = formatting.fired(
+        target_id=TARGET, message="m", creator_name="E", fire_at=next_year,
+        zone="America/Chicago", now=datetime(2026, 12, 31, 15, 0, tzinfo=timezone.utc),
+    )
+    assert text.splitlines()[3].endswith("Jan 5, 2027")

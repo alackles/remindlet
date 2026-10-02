@@ -148,7 +148,7 @@ class Reminders(commands.Cog):
             creator_name=_name(interaction.user),
             channel_id=interaction.channel_id,
             created=[
-                formatting.Created(rid, t.id, p.display, p.fire_at, p.zone)
+                formatting.Created(rid, t.id, p.fire_at, p.zone)
                 for rid, t, p in zip(ids, targets, parsed)
             ],
             now=now,
@@ -206,6 +206,7 @@ class Reminders(commands.Cog):
             message=row["message"],
             fire_at=db.from_iso(row["fire_at"]) if show_time else None,
             zone=row["original_tz"],
+            now=datetime.now(timezone.utc),
             reason=reason,
             siblings=siblings,
         )
@@ -408,8 +409,8 @@ class Reminders(commands.Cog):
             target_id=target.id,
             message=row["message"],
             creator_name=await self._member_name(row["guild_id"], row["creator_id"]),
-            display=time_parser.format_in_zone(fire_at, row["original_tz"]),
             fire_at=fire_at,
+            zone=row["original_tz"],
             now=datetime.now(timezone.utc),
         )
         await channel.send(text, allowed_mentions=discord.AllowedMentions(users=[target]))
