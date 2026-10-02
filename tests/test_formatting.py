@@ -189,3 +189,10 @@ def test_fired_shows_year_when_not_current():
         zone="America/Chicago", now=datetime(2026, 12, 31, 15, 0, tzinfo=timezone.utc),
     )
     assert text.splitlines()[3].endswith("Jan 5, 2027")
+
+
+def test_dm_fallback_line():
+    assert formatting.dm_fallback(42, "Research Server") == (
+        "-# Sent by DM: I can't post in <#42> (Research Server) anymore."
+    )
+    assert formatting.dm_fallback(42, None) == "-# Sent by DM: I can't post in <#42> anymore."

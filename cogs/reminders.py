@@ -1,11 +1,11 @@
-"""/remind, /reschedule, /snooze, /cancel, /done, /list, and firing reminders
-when the scheduler says they're due."""
+"""/remind, /reschedule, /snooze, /cancel, /done, /list, the buttons on fired
+reminders, and firing reminders when the scheduler says they're due."""
 
 import asyncio
 import logging
 import sqlite3
 from collections.abc import Callable
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import discord
 from discord import app_commands
@@ -31,6 +31,67 @@ def _parse_id(text: str) -> int | None:
     return int(text) if text.isdigit() else None
 
 
+# --- Buttons on fired reminders ----------------------------------------------------
+
+BUTTONS = {
+    "s15": ("Snooze 15m", discord.ButtonStyle.secondary),
+    "s60": ("Snooze 1h", discord.ButtonStyle.secondary),
+    "done": ("Done ✓", discord.ButtonStyle.success),
+    "cancel": ("Cancel", discord.ButtonStyle.danger),
+}
+SNOOZES = {"s15": timedelta(minutes=15), "s60": timedelta(hours=1)}
+
+
+class ReminderButton(
+    discord.ui.DynamicItem[discord.ui.Button],
+    template=r"rem:(?P<id>\d+):(?P<at>\d+):(?P<action>s15|s60|done|cancel)",
+):
+    """A button whose custom_id carries everything needed to handle a click:
+    reminder ID, the fire time of the firing it belongs to, and the action.
+    Registered with add_dynamic_items, so clicks work after restarts too."""
+
+    def __init__(self, reminder_id: int, fire_unix: int, action: str) -> None:
+        label, style = BUTTONS[action]
+        super().__init__(
+            discord.ui.Button(
+                label=label, style=style, custom_id=f"rem:{reminder_id}:{fire_unix}:{action}"
+            )
+        )
+        self.reminder_id = reminder_id
+        self.fire_unix = fire_unix
+        self.action = action
+
+    @classmethod
+    async def from_custom_id(cls, interaction, item, match):
+        return cls(int(match["id"]), int(match["at"]), match["action"])
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        cog = interaction.client.get_cog("Reminders")
+        await cog.on_button(interaction, self.reminder_id, self.fire_unix, self.action)
+
+
+def reminder_buttons(reminder_id: int, fire_at: datetime) -> discord.ui.View:
+    view = discord.ui.View(timeout=None)
+    for action in BUTTONS:
+        view.add_item(ReminderButton(reminder_id, int(fire_at.timestamp()), action))
+    return view
+
+
+def button_problem(row: sqlite3.Row | None, fire_unix: int) -> str | None:
+    """Why a button can't act, or None if it can.
+
+    A button belongs to one firing. It's live only while the reminder is still
+    in that firing: status 'fired' with the same fire time.
+    """
+    if row is None:
+        return "missing"
+    if row["status"] not in db.OPEN:
+        return "closed"
+    if row["status"] != "fired" or int(db.from_iso(row["fire_at"]).timestamp()) != fire_unix:
+        return "moved"
+    return None
+
+
 class Reminders(commands.Cog):
     def __init__(self, bot: commands.Bot) -> None:
         self.bot = bot
@@ -41,6 +102,7 @@ class Reminders(commands.Cog):
         self._names: dict[int, str] = {}
 
     async def cog_load(self) -> None:
+        self.bot.add_dynamic_items(ReminderButton)
         # Channels aren't known until the bot is ready, and setup_hook (where
         # cogs load) must finish before that can happen, so start in a task.
         self._starter = asyncio.create_task(self._start_when_ready())
@@ -51,6 +113,7 @@ class Reminders(commands.Cog):
         log.info("Scheduler started")
 
     async def cog_unload(self) -> None:
+        self.bot.remove_dynamic_items(ReminderButton)
         if self._starter is not None:
             self._starter.cancel()
         await self.scheduler.stop()
@@ -170,32 +233,24 @@ class Reminders(commands.Cog):
             return None
         return row
 
-    async def _closed_message(self, error: db.ReminderClosed) -> str:
-        row = error.row
+    async def _closed_text(self, row: sqlite3.Row, closer_id: str | None) -> str:
         text = f"Reminder #{row['id']} was already {CLOSED_VERBS[row['status']]}"
-        if error.closed_by:
-            text += f" by {await self._member_name(row['guild_id'], error.closed_by)}"
+        if closer_id:
+            text += f" by {await self._member_name(row['guild_id'], closer_id)}"
         return text + "."
 
-    async def _apply(
+    async def _note(
         self,
-        interaction: discord.Interaction,
         row: sqlite3.Row,
-        change: Callable[[], sqlite3.Row],
         header: str,
+        actor_id: int,
         *,
         show_time: bool = False,
         reason: str | None = None,
         show_siblings: bool = False,
-    ) -> None:
-        """Run a state change and announce it in the reminder's channel."""
-        try:
-            row = change()
-        except db.ReminderClosed as e:
-            await interaction.response.send_message(await self._closed_message(e), ephemeral=True)
-            return
-        self.scheduler.wake()
-
+    ) -> tuple[str, discord.AllowedMentions]:
+        """The audit note for a change just made, and who it may ping: the
+        target, unless they made the change themselves."""
         siblings = []
         if show_siblings:
             for sib in db.open_siblings(self.bot.db, row):
@@ -212,10 +267,40 @@ class Reminders(commands.Cog):
         )
         target = int(row["target_id"])
         mentions = (
-            NO_PINGS if target == interaction.user.id
-            else discord.AllowedMentions(users=[discord.Object(target)])
+            NO_PINGS if target == actor_id else discord.AllowedMentions(users=[discord.Object(target)])
         )
+        return note, mentions
+
+    async def _apply(
+        self,
+        interaction: discord.Interaction,
+        row: sqlite3.Row,
+        change: Callable[[], sqlite3.Row],
+        header: str,
+        **note_options,
+    ) -> None:
+        """Run a slash-command state change and announce it in the reminder's channel."""
+        try:
+            row = change()
+        except db.ReminderClosed as e:
+            await interaction.response.send_message(
+                await self._closed_text(e.row, e.closed_by), ephemeral=True
+            )
+            return
+        self.scheduler.wake()
+        note, mentions = await self._note(row, header, interaction.user.id, **note_options)
         await self._announce(interaction, int(row["channel_id"]), note, mentions)
+
+    async def _send_to_channel(
+        self, channel_id: int, note: str, mentions: discord.AllowedMentions
+    ) -> bool:
+        try:
+            channel = self.bot.get_channel(channel_id) or await self.bot.fetch_channel(channel_id)
+            await channel.send(note, allowed_mentions=mentions)
+            return True
+        except discord.HTTPException:
+            log.warning("Couldn't post in channel %s", channel_id)
+            return False
 
     async def _announce(
         self,
@@ -228,15 +313,65 @@ class Reminders(commands.Cog):
         otherwise directly, with a private pointer for the person who asked."""
         if interaction.channel_id == channel_id:
             await interaction.response.send_message(note, allowed_mentions=mentions)
-            return
-        try:
-            channel = self.bot.get_channel(channel_id) or await self.bot.fetch_channel(channel_id)
-            await channel.send(note, allowed_mentions=mentions)
-        except discord.HTTPException:
-            log.warning("Couldn't post in channel %s; announcing here instead", channel_id)
+        elif await self._send_to_channel(channel_id, note, mentions):
+            await interaction.response.send_message(f"Done. Posted in <#{channel_id}>.", ephemeral=True)
+        else:
             await interaction.response.send_message(note, allowed_mentions=mentions)
+
+    async def on_button(
+        self, interaction: discord.Interaction, rid: int, fire_unix: int, action: str
+    ) -> None:
+        """Handle a click on a fired reminder's button (see ReminderButton)."""
+        self._remember(interaction.user)
+        conn = self.bot.db
+        row = db.get_reminder(conn, rid)
+        if (problem := button_problem(row, fire_unix)) is not None:
+            await self._reject_button(interaction, rid, row, problem)
             return
-        await interaction.response.send_message(f"Done. Posted in <#{channel_id}>.", ephemeral=True)
+
+        actor = _name(interaction.user)
+        uid = interaction.user.id
+        if action in SNOOZES:
+            length = SNOOZES[action]
+            change = lambda: db.snooze(conn, rid, actor_id=uid, duration=length, now=datetime.now(timezone.utc))
+            header = f"💤 {actor} snoozed reminder #{rid} for {time_parser.format_duration(length)}"
+            options = {"show_time": True}
+        elif action == "done":
+            change = lambda: db.complete(conn, rid, actor_id=uid)
+            header = f"✅ {actor} completed reminder #{rid}"
+            options = {}
+        else:
+            change = lambda: db.cancel(conn, rid, actor_id=uid)
+            header = f"❌ {actor} cancelled reminder #{rid}"
+            options = {"show_siblings": True}
+
+        # No await between the check above and this change, so no other click
+        # can slip in between them.
+        row = change()
+        self.scheduler.wake()
+        await interaction.response.edit_message(view=None)
+        note, mentions = await self._note(row, header, uid, **options)
+        if not await self._send_to_channel(int(row["channel_id"]), note, mentions):
+            # Delivered by DM fallback, or the channel vanished since: note goes here.
+            await interaction.followup.send(note, allowed_mentions=mentions)
+
+    async def _reject_button(
+        self, interaction: discord.Interaction, rid: int, row: sqlite3.Row | None, problem: str
+    ) -> None:
+        if problem == "missing":
+            text = f"Reminder #{rid} no longer exists."
+        elif problem == "closed":
+            text = await self._closed_text(row, db.closed_by(self.bot.db, rid))
+        else:
+            text = (
+                f"Reminder #{rid} has moved since this message. "
+                f"Use `/snooze {rid} <duration>` or `/done {rid}` instead."
+            )
+        await interaction.response.send_message(text, ephemeral=True)
+        try:
+            await interaction.message.edit(view=None)  # these buttons are dead; remove them
+        except discord.HTTPException:
+            pass
 
     @app_commands.command(description="Move a reminder to a new time.")
     @app_commands.rename(id_="id")
@@ -400,9 +535,8 @@ class Reminders(commands.Cog):
     # --- Firing -----------------------------------------------------------------------
 
     async def fire(self, row: sqlite3.Row) -> None:
-        """Post a due reminder in its channel. Called by the scheduler."""
-        channel_id = int(row["channel_id"])
-        channel = self.bot.get_channel(channel_id) or await self.bot.fetch_channel(channel_id)
+        """Post a due reminder in its channel, or DM the target if the channel
+        is gone or off-limits. Called by the scheduler."""
         target = discord.Object(int(row["target_id"]))
         fire_at = db.from_iso(row["fire_at"])
         text = formatting.fired(
@@ -413,8 +547,22 @@ class Reminders(commands.Cog):
             zone=row["original_tz"],
             now=datetime.now(timezone.utc),
         )
-        await channel.send(text, allowed_mentions=discord.AllowedMentions(users=[target]))
-        log.info("Fired reminder #%s", row["id"])
+        buttons = reminder_buttons(row["id"], fire_at)
+        channel_id = int(row["channel_id"])
+        try:
+            channel = self.bot.get_channel(channel_id) or await self.bot.fetch_channel(channel_id)
+            await channel.send(
+                text, view=buttons, allowed_mentions=discord.AllowedMentions(users=[target])
+            )
+            log.info("Fired reminder #%s", row["id"])
+        except (discord.NotFound, discord.Forbidden):
+            guild = self.bot.get_guild(int(row["guild_id"]))
+            user = self.bot.get_user(target.id) or await self.bot.fetch_user(target.id)
+            await user.send(
+                text + "\n" + formatting.dm_fallback(channel_id, guild.name if guild else None),
+                view=buttons,
+            )
+            log.warning("Channel %s unreachable; DMed reminder #%s", channel_id, row["id"])
 
 
 async def setup(bot: commands.Bot) -> None:

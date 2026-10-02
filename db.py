@@ -239,6 +239,19 @@ class ReminderClosed(ValueError):
         self.closed_by = closed_by
 
 
+def closed_by(conn: sqlite3.Connection, reminder_id: int) -> str | None:
+    """Discord ID of whoever marked the reminder done or cancelled it, if anyone."""
+    row = conn.execute(
+        """
+        SELECT actor_id FROM reminder_log
+        WHERE reminder_id = ? AND action IN ('done', 'cancelled')
+        ORDER BY id DESC LIMIT 1
+        """,
+        (reminder_id,),
+    ).fetchone()
+    return row["actor_id"] if row else None
+
+
 def _change(
     conn: sqlite3.Connection,
     reminder_id: int,
@@ -260,15 +273,7 @@ def _change(
         if row is None:
             raise ReminderNotFound(reminder_id)
         if row["status"] not in OPEN:
-            closer = conn.execute(
-                """
-                SELECT actor_id FROM reminder_log
-                WHERE reminder_id = ? AND action IN ('done', 'cancelled')
-                ORDER BY id DESC LIMIT 1
-                """,
-                (reminder_id,),
-            ).fetchone()
-            raise ReminderClosed(row, closer["actor_id"] if closer else None)
+            raise ReminderClosed(row, closed_by(conn, reminder_id))
 
         old = row["fire_at"]
         new = to_iso(new_fire_at(row)) if new_fire_at else None

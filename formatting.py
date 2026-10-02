@@ -148,3 +148,9 @@ def reminder_list(rows: Sequence[Mapping[str, Any]], *, title: str, now: datetim
             shown += 1
         out += block
     return out
+
+
+def dm_fallback(channel_id: int | str, guild_name: str | None) -> str:
+    """Last line of a reminder delivered by DM because its channel is unreachable."""
+    where = f"<#{channel_id}>" + (f" ({guild_name})" if guild_name else "")
+    return f"-# Sent by DM: I can't post in {where} anymore."
