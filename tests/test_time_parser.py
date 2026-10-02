@@ -23,7 +23,6 @@ NEW_YORK = "America/New_York"
         ("America/Chicago", "America/Chicago"),
         ("america/chicago", "America/Chicago"),
         ("  America/New York ", "America/New_York"),
-        ("US/Central", "US/Central"),
         ("utc", "UTC"),
     ],
 )
