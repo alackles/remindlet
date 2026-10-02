@@ -26,3 +26,13 @@ tests: `test_open_siblings` (which siblings count as open) and `test_reschedule_
 1. `/remind who:@you when:in 1 hour what:sibling test also:@them`.
 2. Cancel *your* copy → the note ends with `ALSO: <their name>'s copy #N is still active`.
 3. Cancel *their* copy → the note **pings them** via the `FOR:` line.
+
+## M6: `reboot` (the bot comes back on its own after the VPS restarts)
+
+Not run. Nothing automated covers it; it depends on `systemctl enable` having
+linked the unit into the boot sequence.
+
+1. On the VPS: `sudo reboot`.
+2. After it's back up: `systemctl status remindlet` → `active (running)`, with a start
+   time just after the reboot.
+3. In Discord, the bot shows as online without anyone having started it.
