@@ -28,11 +28,11 @@ Design choices the spec doesn't cover. Format: milestone — choice (convention 
 - M2 — Whether a past time-only input omitted its date is detected by re-parsing with "now" moved a day later and checking whether the result moves with it. (judgment call)
 - M2 — dateparser restricted to English (`languages=["en"]`): faster, and avoids matching words in other languages. (convention)
 - M2 — Tests name fake users by role (`USER`, `CREATOR`, `TARGET`) with snowflake-sized IDs, not real server members; parser tests describe the spec's scenario in a comment instead. (convention, correction)
-- M3 — Scheduler is one asyncio task that treats the database as the schedule (sleep until the soonest active reminder, fire what's due, repeat), not APScheduler; `wake()` interrupts the sleep when reminders change. (judgment call)
+- M3 — Scheduler is one asyncio task that treats the database as the schedule (sleep until the soonest active reminder, fire what's due, repeat), not APScheduler; `wake()` interrupts the sleep when reminders change. (judgment call) **Superseded before M6.**
 - M3 — Send, then mark fired: a crash between the two re-fires on restart (duplicate) rather than losing the reminder. (judgment call)
 - M3 — A failed send is logged and still marked fired so it isn't retried forever; Milestone 5's DM fallback goes in the fire callback. (judgment call)
-- M3 — The scheduler re-checks the database at least every 60 s, so a system clock adjustment can't strand a reminder. (convention)
-- M3 — The scheduler takes its fire callback and clock as arguments, so tests run with a fake clock and no Discord. (convention)
+- M3 — The scheduler re-checks the database at least every 60 s, so a system clock adjustment can't strand a reminder. (convention) **Superseded before M6.**
+- M3 — The scheduler takes its fire callback and clock as arguments, so tests run with a fake clock and no Discord. (convention) **Superseded before M6.**
 - M3 — Message text lives in a new `formatting.py` (no Discord imports), so formats are tested against the spec's examples. (judgment call)
 - M3 — A reminder fired more than 1 minute after its time gets the late note. (judgment call)
 - M3 — `what` is capped at 500 characters so three confirmation lines fit in Discord's 2000-character message limit. (judgment call)
@@ -60,3 +60,4 @@ Design choices the spec doesn't cover. Format: milestone — choice (convention 
 - M5 — DM fallback triggers only when the channel is gone or off-limits (`NotFound`/`Forbidden`); other errors are logged and the reminder is marked fired, as in M3. (judgment call)
 - M5 — The Cancel button's note includes `ALSO:` sibling lines like `/cancel`; snooze and done notes don't, per the spec's light-linking rule. (convention)
 - M5 — Smoke-starting the bot during development uses a scratch `DB_PATH`, after a startup check fired a real pending reminder. (convention)
+- Before 6 — Replaced the event-driven scheduler (wake-ups, sleep-until-next, 60 s cap, injectable clock) with a `discord.ext.tasks` loop that fires whatever is due every 15 s. Reminders can arrive up to 15 s late; startup recovery and send-then-mark are unchanged. (judgment call, correction)

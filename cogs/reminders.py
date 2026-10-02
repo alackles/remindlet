@@ -1,7 +1,6 @@
 """/remind, /reschedule, /snooze, /cancel, /done, /list, the buttons on fired
-reminders, and firing reminders when the scheduler says they're due."""
+reminders, and firing reminders when they come due."""
 
-import asyncio
 import logging
 import sqlite3
 from collections.abc import Callable
@@ -9,12 +8,12 @@ from datetime import datetime, timedelta, timezone
 
 import discord
 from discord import app_commands
-from discord.ext import commands
+from discord.ext import commands, tasks
 
 import db
 import formatting
 import time_parser
-from scheduler import Scheduler
+import scheduler
 
 log = logging.getLogger(__name__)
 
@@ -95,28 +94,30 @@ def button_problem(row: sqlite3.Row | None, fire_unix: int) -> str | None:
 class Reminders(commands.Cog):
     def __init__(self, bot: commands.Bot) -> None:
         self.bot = bot
-        self.scheduler = Scheduler(bot.db, self.fire)
-        self._starter: asyncio.Task | None = None
         # Display names seen so far. Without the privileged members intent
         # there's no member cache, and autocomplete can't wait on API calls.
         self._names: dict[int, str] = {}
 
     async def cog_load(self) -> None:
         self.bot.add_dynamic_items(ReminderButton)
-        # Channels aren't known until the bot is ready, and setup_hook (where
-        # cogs load) must finish before that can happen, so start in a task.
-        self._starter = asyncio.create_task(self._start_when_ready())
-
-    async def _start_when_ready(self) -> None:
-        await self.bot.wait_until_ready()
-        self.scheduler.start()
-        log.info("Scheduler started")
+        self.poll.start()
 
     async def cog_unload(self) -> None:
         self.bot.remove_dynamic_items(ReminderButton)
-        if self._starter is not None:
-            self._starter.cancel()
-        await self.scheduler.stop()
+        self.poll.cancel()
+
+    @tasks.loop(seconds=scheduler.POLL_SECONDS)
+    async def poll(self) -> None:
+        try:
+            await scheduler.fire_due(self.bot.db, self.fire, datetime.now(timezone.utc))
+        except Exception:
+            # An uncaught error would stop the loop for good; log and keep polling.
+            log.exception("Polling for due reminders failed")
+
+    @poll.before_loop
+    async def before_poll(self) -> None:
+        # Channels aren't known until the bot has connected.
+        await self.bot.wait_until_ready()
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         # Runs before every command in this cog: remember who we've seen.
@@ -204,7 +205,6 @@ class Reminders(commands.Cog):
                 db.NewReminder(t.id, p.fire_at, p.zone, p.display) for t, p in zip(targets, parsed)
             ],
         )
-        self.scheduler.wake()
 
         text = formatting.confirmation(
             message=what,
@@ -287,7 +287,6 @@ class Reminders(commands.Cog):
                 await self._closed_text(e.row, e.closed_by), ephemeral=True
             )
             return
-        self.scheduler.wake()
         note, mentions = await self._note(row, header, interaction.user.id, **note_options)
         await self._announce(interaction, int(row["channel_id"]), note, mentions)
 
@@ -348,7 +347,6 @@ class Reminders(commands.Cog):
         # No await between the check above and this change, so no other click
         # can slip in between them.
         row = change()
-        self.scheduler.wake()
         await interaction.response.edit_message(view=None)
         note, mentions = await self._note(row, header, uid, **options)
         if not await self._send_to_channel(int(row["channel_id"]), note, mentions):
@@ -536,7 +534,7 @@ class Reminders(commands.Cog):
 
     async def fire(self, row: sqlite3.Row) -> None:
         """Post a due reminder in its channel, or DM the target if the channel
-        is gone or off-limits. Called by the scheduler."""
+        is gone or off-limits. Called by poll() via scheduler.fire_due()."""
         target = discord.Object(int(row["target_id"]))
         fire_at = db.from_iso(row["fire_at"])
         text = formatting.fired(

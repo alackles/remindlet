@@ -175,14 +175,6 @@ def test_create_is_all_or_nothing(conn):
     assert conn.execute("SELECT COUNT(*) FROM reminder_log").fetchone()[0] == 0
 
 
-def test_next_fire_at_is_soonest_active(conn, people):
-    assert db.next_fire_at(conn) is None
-    first, second = create(conn, new(TARGET, T0 + timedelta(hours=2)), new(TARGET, T0))
-    assert db.next_fire_at(conn) == T0
-    db.mark_fired(conn, second)
-    assert db.next_fire_at(conn) == T0 + timedelta(hours=2)
-
-
 def test_due_reminders(conn, people):
     late, now_, future = create(
         conn, new(TARGET, T0 - timedelta(hours=1)), new(TARGET, T0), new(TARGET, T0 + timedelta(seconds=1))
@@ -201,7 +193,6 @@ def test_inactive_reminders_are_never_due(conn, people, status):
     [rid] = create(conn, new(TARGET))
     conn.execute("UPDATE reminders SET status = ? WHERE id = ?", (status, rid))
     assert db.due_reminders(conn, T0) == []
-    assert db.next_fire_at(conn) is None
 
 
 def test_mark_fired_logs_once(conn, people):

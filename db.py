@@ -189,14 +189,6 @@ def get_reminder(conn: sqlite3.Connection, reminder_id: int) -> sqlite3.Row | No
     return conn.execute("SELECT * FROM reminders WHERE id = ?", (reminder_id,)).fetchone()
 
 
-def next_fire_at(conn: sqlite3.Connection) -> datetime | None:
-    """When the soonest active reminder is due, or None if there are none."""
-    row = conn.execute(
-        f"SELECT MIN(fire_at) FROM reminders WHERE status IN {ACTIVE}"
-    ).fetchone()
-    return from_iso(row[0]) if row[0] else None
-
-
 def due_reminders(conn: sqlite3.Connection, now: datetime) -> list[sqlite3.Row]:
     """Active reminders whose fire time has arrived, oldest first."""
     return conn.execute(
