@@ -13,7 +13,7 @@ Full behavior: [docs/SPEC.md](docs/SPEC.md). Running and deploying: [docs/SETUP.
 ```
 remindlet/
 ├── bot.py                  # entry point: connects, loads cogs, syncs slash commands
-├── config.py               # reads the token, server ID, and database path from .env
+├── config.py               # reads the token, server IDs, and database path from .env
 ├── db.py                   # SQLite schema, migrations, and every query
 ├── time_parser.py          # reads input: "friday 9am their time", zones, snooze lengths
 ├── formatting.py           # writes output: the text of every message the bot posts

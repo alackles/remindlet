@@ -72,3 +72,5 @@ Design choices the spec doesn't cover. Format: milestone — choice (convention 
 - M6 — Run/deploy instructions live in `docs/SETUP.md`; `README.md` is reserved for describing what the bot is. (convention, correction)
 - M6 — Tests use only canonical IANA names: legacy aliases like `US/Central` come from Ubuntu's optional `tzdata-legacy` package, present locally but not on the VPS. The bot itself only offers what the machine has. (convention)
 - M6 — On the VPS the bot runs as an unprivileged system user `remindlet` (code in `/opt/remindlet`, home in `/var/lib/remindlet` so caches stay out of the repo), cloned over HTTPS since the server only pulls a public repo. (convention, correction)
+- Post-M6 — Multiple servers: `GUILD_IDS` (comma-separated, replaces `GUILD_ID`) lists every server, and startup syncs commands to each, rather than a global sync. Keeps updates instant and avoids duplicate commands in the original server. (judgment call)
+- Post-M6 — A server whose sync is refused (`Forbidden`: not invited yet, or removed) is logged and skipped, so one bad ID doesn't stop the bot for the other servers. (judgment call)

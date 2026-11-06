@@ -284,7 +284,7 @@ Reminders that came due while the bot was offline fire immediately on startup, w
 
 ### Discord bot setup
 
-Requires a Discord application with a bot user and the privileged **Server Members** intent enabled (for display names). Invite scopes: `bot` and `applications.commands`. Permissions needed: Send Messages, Embed Links, Read Message History. The bot should be added to the server with an OAuth2 URL scoped to the specific server.
+Requires a Discord application with a bot user and the privileged **Server Members** intent enabled (for display names). Invite scopes: `bot` and `applications.commands`. Permissions needed: Send Messages, Embed Links, Read Message History. The bot can serve several servers from one process: invite it to each with an OAuth2 URL scoped to that server, and list every server's ID in `GUILD_IDS`, where slash commands are synced. Reminders, `/list`, and management commands stay within the server they belong to; timezones belong to the person and carry across servers.
 
 ### Repo structure
 
@@ -299,7 +299,7 @@ remindlet/
 ├── db.py               # SQLite connection, schema and migrations, queries
 ├── time_parser.py      # Reading input: times, zones, qualifiers, durations
 ├── formatting.py       # Writing output: every message the bot posts
-├── config.py           # Token, guild ID, DB path from .env
+├── config.py           # Token, guild IDs, DB path from .env
 ├── deploy/
 │   └── remindlet.service  # systemd unit template
 ├── docs/               # SPEC.md, DECISIONS.md, SETUP.md, UNTESTED.md
